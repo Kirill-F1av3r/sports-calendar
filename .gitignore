@@ -1,0 +1,87 @@
+# Maven / build
+target/
+!**/src/main/**/target/
+!**/src/test/**/target/
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.jar
+
+# wrapper files
+mvnw
+mvnw.cmd
+
+# compiled class files
+*.class
+
+# Package files
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# logs
+*.log
+hs_err_pid*
+replay_pid*
+
+# IDEs
+## IntelliJ
+.idea/
+.idea/modules.xml
+.idea/jarRepositories.xml
+.idea/compiler.xml
+.idea/libraries/
+*.iws
+*.iml
+*.ipr
+
+## Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache
+
+## NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+## VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Kotlin build
+.kotlin
+
+# Temporary files
+*.tmp
+*~
+*.swp
+
+# Test output / reports
+/target/site
+**/target/site
+
+# Docker / compose local overrides and env
+.env
+.env.* 
+docker-compose.override.yml
+
+# Secrets / keystores
+*.jks
+*.keystore
+*.p12
+secrets.* 
+*.secret
+
+# Misc
+HELP.md
