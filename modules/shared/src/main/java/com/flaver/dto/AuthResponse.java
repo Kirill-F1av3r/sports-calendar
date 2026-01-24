@@ -1,4 +1,3 @@
 package com.flaver.dto;
 
-public record AuthResponse() {
-}
+public record AuthResponse(String accessToken, String refreshToken, long expiresIn) {}
