@@ -25,7 +25,7 @@ public class AuthService {
     }
 
     public User register(String email, String password, String fullName) {
-        userRepository.findByEmail(email).ifPresent(u -> {throw new RuntimeException("user exists");});
+        userRepository.findByEmail(email.toLowerCase()).ifPresent(u -> {throw new RuntimeException("user exists");});
         User user = new User();
         user.setEmail(email.toLowerCase());
         user.setFullName(fullName);
