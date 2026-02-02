@@ -24,7 +24,7 @@ public class CalendarService {
 
     @Transactional
     public Calendar createCalendar(UUID ownerId, CreateCalendarRequest request) {
-        if (request == null || request.name().isEmpty()) {
+        if (request == null || request.name().isBlank()) {
             throw new IllegalArgumentException("name is required");
         }
         Calendar calendar = new Calendar();
