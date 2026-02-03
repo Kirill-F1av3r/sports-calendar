@@ -1,0 +1,18 @@
+server:
+  port:
+    8081
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/auth_db
+    username: postgres
+    password: 1234
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  security:
+    jwt:
+      secret: "CHANGE_THIS_SECRET_32_BYTES_MINIMUM_!!!!!!!!"
+      accessTokenSeconds: 900
