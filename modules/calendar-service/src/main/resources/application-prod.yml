@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: ${CALENDAR_DB_URL}
+    username: ${CALENDAR_DB_USERNAME}
+    password: ${CALENDAR_DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
