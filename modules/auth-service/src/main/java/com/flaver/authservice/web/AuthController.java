@@ -8,6 +8,7 @@ import com.flaver.authservice.service.AuthService;
 import com.flaver.dto.AuthResponse;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,7 +22,7 @@ public class AuthController {
     public ResponseEntity<CreatedIdResponse> registerUser(@Valid @RequestBody RegisterRequest registerRequest) {
         User user = authService.register(registerRequest.email(), registerRequest.password(),
                 registerRequest.fullName());
-        return ResponseEntity.ok(new CreatedIdResponse((user.getId())));
+        return ResponseEntity.status(HttpStatus.CREATED).body(new CreatedIdResponse((user.getId())));
     }
 
     @PostMapping("/login")
