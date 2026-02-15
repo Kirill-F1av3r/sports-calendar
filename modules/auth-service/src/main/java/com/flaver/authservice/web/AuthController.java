@@ -1,13 +1,15 @@
 package com.flaver.authservice.web;
 
+import com.flaver.authservice.dto.CreatedIdResponse;
+import com.flaver.authservice.dto.LoginRequest;
+import com.flaver.authservice.dto.RegisterRequest;
 import com.flaver.authservice.entity.User;
 import com.flaver.authservice.service.AuthService;
 import com.flaver.dto.AuthResponse;
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
@@ -16,14 +18,15 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<?> registerUser(@RequestBody Map<String, String> payload) {
-        User user = authService.register(payload.get("email"), payload.get("password"), payload.get("fullName"));
-        return ResponseEntity.ok(Map.of("id", user.getId()));
+    public ResponseEntity<CreatedIdResponse> registerUser(@Valid @RequestBody RegisterRequest registerRequest) {
+        User user = authService.register(registerRequest.email(), registerRequest.password(),
+                registerRequest.fullName());
+        return ResponseEntity.ok(new CreatedIdResponse((user.getId())));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Map<String, String> payload) {
-        String token = authService.login(payload.get("email"), payload.get("password"));
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
+        String token = authService.login(loginRequest.email(), loginRequest.password());
         return ResponseEntity.ok(new AuthResponse(token, "", 900));
     }
 }
