@@ -1,0 +1,9 @@
+services:
+  auth:
+    url: ${AUTH_SERVICE_URL}
+  calendar:
+    url: ${CALENDAR_SERVICE_URL}
+
+security:
+  jwt:
+    secret: ${GATEWAY_JWT_SECRET}
