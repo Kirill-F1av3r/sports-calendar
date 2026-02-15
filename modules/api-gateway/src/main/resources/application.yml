@@ -1,12 +1,12 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 services:
   auth:
-    url: http://localhost:8081
+    url: ${AUTH_SERVICE_URL:http://localhost:8081}
   calendar:
-    url: http://localhost:8082
+    url: ${CALENDAR_SERVICE_URL:http://localhost:8082}
 
 security:
   jwt:
-    secret: "CHANGE_THIS_SECRET_32_BYTES_MINIMUM_!!!!!!!!"
+    secret: ${GATEWAY_JWT_SECRET:dev-secret-change-me-32-bytes-minimum}
