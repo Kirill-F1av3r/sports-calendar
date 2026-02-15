@@ -1,18 +1,17 @@
 server:
-  port:
-    8081
+  port: ${SERVER_PORT:8081}
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/auth_db
-    username: postgres
-    password: 1234
+    url: ${AUTH_DB_URL:jdbc:postgresql://localhost:5432/auth_db}
+    username: ${AUTH_DB_USERNAME:postgres}
+    password: ${AUTH_DB_PASSWORD:1234}
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: ${AUTH_JPA_DDL_AUTO:update}
+    show-sql: ${AUTH_JPA_SHOW_SQL:true}
 
   security:
     jwt:
-      secret: "CHANGE_THIS_SECRET_32_BYTES_MINIMUM_!!!!!!!!"
-      accessTokenSeconds: 900
+      secret: ${AUTH_JWT_SECRET:dev-secret-change-me-32-bytes-minimum}
+      accessTokenSeconds: ${AUTH_JWT_ACCESS_TOKEN_SECONDS:900}

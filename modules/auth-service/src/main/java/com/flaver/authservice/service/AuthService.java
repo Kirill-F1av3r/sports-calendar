@@ -1,6 +1,8 @@
 package com.flaver.authservice.service;
 
 import com.flaver.authservice.entity.User;
+import com.flaver.authservice.exception.InvalidCredentialsException;
+import com.flaver.authservice.exception.UserAlreadyExistsException;
 import com.flaver.authservice.repository.UserRepository;
 import com.flaver.security.JwtUtils;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,9 +27,14 @@ public class AuthService {
     }
 
     public User register(String email, String password, String fullName) {
-        userRepository.findByEmail(email.toLowerCase()).ifPresent(u -> {throw new RuntimeException("user exists");});
+        String normalizedEmail = email.toLowerCase();
+        userRepository.findByEmail(normalizedEmail)
+                .ifPresent(user -> {
+                    throw new UserAlreadyExistsException("user already exists");
+                });
+
         User user = new User();
-        user.setEmail(email.toLowerCase());
+        user.setEmail(normalizedEmail);
         user.setFullName(fullName);
         user.setPasswordHash(passwordEncoder.encode(password));
         user.setRoles("USER");
@@ -35,10 +42,11 @@ public class AuthService {
     }
 
     public String login(String email, String password) {
-        User user = userRepository.findByEmail(email.toLowerCase())
-                .orElseThrow(() -> new RuntimeException("Invalid credentials"));
-        if  (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            throw new RuntimeException("Invalid credentials");
+        String normalizedEmail = email.toLowerCase();
+        User user = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid credentials"));
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+            throw new InvalidCredentialsException("Invalid credentials");
         }
         return jwtUtils.generateAccessToken(user.getId().toString(), List.of("USER"));
     }
