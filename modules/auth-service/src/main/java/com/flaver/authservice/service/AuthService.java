@@ -19,8 +19,8 @@ public class AuthService {
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
-                       @Value("${spring.security.jwt.secret}") String secret,
-                       @Value("${spring.security.jwt.accessTokenSeconds}") long accessTokenSeconds) {
+                       @Value("${security.jwt.secret}") String secret,
+                       @Value("${security.jwt.accessTokenSeconds}") long accessTokenSeconds) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtils = new JwtUtils(secret, accessTokenSeconds);

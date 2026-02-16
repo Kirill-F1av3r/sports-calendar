@@ -8,7 +8,7 @@ spring:
       ddl-auto: validate
     show-sql: false
 
-  security:
-    jwt:
-      secret: ${AUTH_JWT_SECRET}
-      accessTokenSeconds: ${AUTH_JWT_ACCESS_TOKEN_SECONDS:900}
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+    accessTokenSeconds: ${JWT_ACCESS_TOKEN_SECONDS:900}

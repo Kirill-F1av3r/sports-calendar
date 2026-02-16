@@ -11,7 +11,7 @@ spring:
       ddl-auto: ${AUTH_JPA_DDL_AUTO:update}
     show-sql: ${AUTH_JPA_SHOW_SQL:true}
 
-  security:
-    jwt:
-      secret: ${AUTH_JWT_SECRET:dev-secret-change-me-32-bytes-minimum}
-      accessTokenSeconds: ${AUTH_JWT_ACCESS_TOKEN_SECONDS:900}
+security:
+  jwt:
+    secret: ${JWT_SECRET:dev-secret-change-me-32-bytes-minimum}
+    accessTokenSeconds: ${JWT_ACCESS_TOKEN_SECONDS:900}
