@@ -7,16 +7,22 @@ import com.flaver.authservice.entity.User;
 import com.flaver.authservice.service.AuthService;
 import com.flaver.dto.AuthResponse;
 import jakarta.validation.Valid;
-import lombok.AllArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/auth")
-@AllArgsConstructor
 public class AuthController {
     private final AuthService authService;
+    private final long accessTokenSeconds;
+
+    public AuthController(AuthService authService,
+                          @Value("${security.jwt.accessTokenSeconds}") long accessTokenSeconds) {
+        this.authService = authService;
+        this.accessTokenSeconds = accessTokenSeconds;
+    }
 
     @PostMapping("/register")
     public ResponseEntity<CreatedIdResponse> registerUser(@Valid @RequestBody RegisterRequest registerRequest) {
@@ -28,6 +34,6 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
         String token = authService.login(loginRequest.email(), loginRequest.password());
-        return ResponseEntity.ok(new AuthResponse(token, "", 900));
+        return ResponseEntity.ok(new AuthResponse(token, "", accessTokenSeconds));
     }
 }

@@ -13,7 +13,7 @@ public class JwtService {
     private final JwtUtils jwtUtils;
 
     public JwtService(JwtProperties properties) {
-        this.jwtUtils = new JwtUtils(properties.getSecret(), 3600);
+        this.jwtUtils = new JwtUtils(properties.getSecret(), properties.getAccessTokenSeconds());
     }
 
     public String extractUserId(String token) {

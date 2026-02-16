@@ -23,7 +23,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(SecurityConfig.class)
 @TestPropertySource(properties = {
         "services.auth.url=http://localhost:8081",
-        "services.calendar.url=http://localhost:8082"
+        "services.calendar.url=http://localhost:8082",
+        "security.jwt.secret=0123456789ABCDEF0123456789ABCDEF",
+        "security.jwt.accessTokenSeconds=900"
 })
 class GatewayControllerTest {
 

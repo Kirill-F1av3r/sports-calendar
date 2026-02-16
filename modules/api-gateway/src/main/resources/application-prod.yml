@@ -6,4 +6,5 @@ services:
 
 security:
   jwt:
-    secret: ${GATEWAY_JWT_SECRET}
+    secret: ${JWT_SECRET}
+    accessTokenSeconds: ${JWT_ACCESS_TOKEN_SECONDS:900}
