@@ -3,6 +3,7 @@ package com.flaver.apigateway.service;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 @Service
 public class ProxyService {
@@ -31,6 +32,18 @@ public class ProxyService {
                 ? requestSpec.body(body).retrieve()
                 : requestSpec.retrieve();
 
-        return responseSpec.toEntity(byte[].class);
+        try {
+            return responseSpec.toEntity(byte[].class);
+        } catch (RestClientResponseException ex) {
+            HttpHeaders responseHeaders = new HttpHeaders();
+            if (ex.getResponseHeaders() != null) {
+                responseHeaders.addAll(ex.getResponseHeaders());
+            }
+
+            return ResponseEntity
+                    .status(ex.getStatusCode())
+                    .headers(responseHeaders)
+                    .body(ex.getResponseBodyAsByteArray());
+        }
     }
 }
