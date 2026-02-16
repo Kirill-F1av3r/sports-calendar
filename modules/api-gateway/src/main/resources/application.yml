@@ -9,4 +9,5 @@ services:
 
 security:
   jwt:
-    secret: ${GATEWAY_JWT_SECRET:dev-secret-change-me-32-bytes-minimum}
+    secret: ${JWT_SECRET:dev-secret-change-me-32-bytes-minimum}
+    accessTokenSeconds: ${JWT_ACCESS_TOKEN_SECONDS:900}
