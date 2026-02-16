@@ -12,7 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import java.sql.Date;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,16 +50,6 @@ public class CalendarServiceTest {
         assertThat(saved.getSportType()).isEqualTo(sportType);
 
         verify(calendarRepository).save(any(Calendar.class));
-    }
-
-    @Test
-    void createCalendar_blankName_throws() {
-        UUID ownerId = UUID.randomUUID();
-        CreateCalendarRequest request = new CreateCalendarRequest("  ", null);
-        assertThatThrownBy(() -> calendarService.createCalendar(ownerId, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("name is required");
-        verifyNoInteractions(calendarRepository);
     }
 
     @Test
@@ -124,15 +114,16 @@ public class CalendarServiceTest {
         when(calendarRepository.findById(calendarId)).thenReturn(Optional.of(calendar));
         when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        CreateEventRequest request = new CreateEventRequest(title, startDate, endDate, location, null);
+        CreateEventRequest request = new CreateEventRequest(title, LocalDate.parse(startDate), LocalDate.parse(endDate),
+                location, null);
         Event event = calendarService.addEvent(calendarId, ownerId, request);
 
         assertThat(event).isNotNull();
         assertThat(event.getCalendarId()).isEqualTo(calendarId);
         assertThat(event.getTitle()).isEqualTo(title);
         assertThat(event.getSource()).isNull();
-        assertThat(event.getStartDate()).isEqualTo(Date.valueOf(startDate));
-        assertThat(event.getEndDate()).isEqualTo(Date.valueOf(endDate));
+        assertThat(event.getStartDate()).isEqualTo(LocalDate.parse(startDate));
+        assertThat(event.getEndDate()).isEqualTo(LocalDate.parse(endDate));
         assertThat(event.getLocation()).isEqualTo(location);
 
         ArgumentCaptor<Event> cap = ArgumentCaptor.forClass(Event.class);
@@ -141,7 +132,7 @@ public class CalendarServiceTest {
     }
 
     @Test
-    void addEvent_invalidDate_throws() {
+    void addEvent_endBeforeStart_throws() {
         UUID ownerId = UUID.randomUUID();
         UUID calendarId = UUID.randomUUID();
         Calendar calendar = new Calendar();
@@ -150,10 +141,10 @@ public class CalendarServiceTest {
 
         when(calendarRepository.findById(calendarId)).thenReturn(Optional.of(calendar));
 
-        CreateEventRequest request = new CreateEventRequest("T", "not-a-date", "not-a-date",
-                "loc", null);
+        CreateEventRequest request = new CreateEventRequest("T", LocalDate.parse("2026-05-03"),
+                LocalDate.parse("2026-05-01"), "loc", null);
         assertThatThrownBy(() -> calendarService.addEvent(calendarId, ownerId, request))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("invalid date format");
+                .hasMessageContaining("end before start");
     }
 }

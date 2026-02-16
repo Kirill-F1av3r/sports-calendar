@@ -12,7 +12,7 @@ import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Date;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,12 +24,9 @@ public class CalendarService {
 
     @Transactional
     public Calendar createCalendar(UUID ownerId, CreateCalendarRequest request) {
-        if (request == null || request.name().isBlank()) {
-            throw new IllegalArgumentException("name is required");
-        }
         Calendar calendar = new Calendar();
         calendar.setOwnerId(ownerId);
-        calendar.setName(request.name());
+        calendar.setName(request.name().trim());
         calendar.setSportType(request.sportType());
         return calendarRepository.save(calendar);
     }
@@ -59,30 +56,18 @@ public class CalendarService {
     public Event addEvent(UUID calendarId, UUID ownerId, CreateEventRequest request) {
         findOwnedOrThrow(calendarId, ownerId);
 
-        if (request.title() == null || request.title().isBlank()){
-            throw new IllegalArgumentException("title is required");
+        LocalDate endDate = request.endDate();
+        if (endDate.isBefore(request.startDate())) {
+            throw new IllegalArgumentException("end before start");
         }
-        Date startDate = parseDate(request.startDate());
-        Date endDate = parseDate(request.endDate());
-        if (endDate != null && endDate.before(startDate)) throw new IllegalArgumentException("end before start");
 
         Event event = new Event();
         event.setCalendarId(calendarId);
         event.setTitle(request.title().trim());
-        event.setStartDate(startDate);
+        event.setStartDate(request.startDate());
         event.setEndDate(endDate);
-        event.setLocation(request.location());
+        event.setLocation(request.location().trim());
         event.setSource(request.source());
         return eventRepository.save(event);
-    }
-
-    private Date parseDate(String str) {
-        if (str == null) throw new IllegalArgumentException("date is required");
-        str = str.trim();
-        try {
-            return Date.valueOf(str);
-        } catch (Exception ignored) {
-            throw new IllegalArgumentException("invalid date format");
-        }
     }
 }
