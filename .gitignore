@@ -85,3 +85,5 @@ secrets.*
 
 # Misc
 HELP.md
+
+!.env.example
