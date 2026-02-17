@@ -1,6 +1,7 @@
 package com.flaver.calendarservice.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.flaver.calendarservice.dto.CreateCalendarRequest;
 import com.flaver.calendarservice.dto.CreateEventRequest;
 import com.flaver.calendarservice.entity.Calendar;
@@ -12,7 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import java.sql.Date;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 public class CalendarControllerTest {
     private CalendarService calendarService;
     private MockMvc mockMvc;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @BeforeEach
     void setUp() {
@@ -87,7 +88,7 @@ public class CalendarControllerTest {
         event.setId(UUID.randomUUID());
         event.setCalendarId(calendarId);
         event.setTitle("E");
-        event.setStartDate(Date.valueOf("2026-05-01"));
+        event.setStartDate(LocalDate.parse("2026-05-01"));
 
         when(calendarService.findOwnedOrThrow(calendarId, ownerId)).thenReturn(calendar);
         when(calendarService.listEvents(calendarId, ownerId)).thenReturn(List.of(event));
@@ -112,8 +113,8 @@ public class CalendarControllerTest {
                     return ev;
                 });
 
-        String body = mapper.writeValueAsString(new CreateEventRequest("Title", "2026-05-01",
-                "2026-05-02", "Loc", null));
+        String body = mapper.writeValueAsString(new CreateEventRequest("Title", LocalDate.parse("2026-05-01"),
+                LocalDate.parse("2026-05-02"), "Loc", null));
 
         mockMvc.perform(post("/calendars/" + calendarId + "/events")
                         .header("X-User-Id", ownerId.toString())

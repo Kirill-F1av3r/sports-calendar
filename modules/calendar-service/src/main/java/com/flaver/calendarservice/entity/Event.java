@@ -4,8 +4,8 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.sql.Date;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -23,10 +23,10 @@ public class Event {
     private String title;
 
     @Column(name="start_ts")
-    private Date startDate;
+    private LocalDate startDate;
 
     @Column(name="end_ts")
-    private Date endDate;
+    private LocalDate endDate;
 
     private String location;
 
