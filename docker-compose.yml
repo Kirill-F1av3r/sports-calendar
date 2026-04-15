@@ -1,0 +1,76 @@
+services:
+  postgres-auth:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d auth_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-calendar:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: calendar_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d calendar_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: modules/auth-service/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      AUTH_DB_URL: jdbc:postgresql://postgres-auth:5432/auth_db
+      AUTH_DB_USERNAME: postgres
+      AUTH_DB_PASSWORD: postgres
+      JWT_SECRET: replace-with-strong-secret123456
+      JWT_ACCESS_TOKEN_SECONDS: 900
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+
+  calendar-service:
+    build:
+      context: .
+      dockerfile: modules/calendar-service/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      CALENDAR_DB_URL: jdbc:postgresql://postgres-calendar:5432/calendar_db
+      CALENDAR_DB_USERNAME: postgres
+      CALENDAR_DB_PASSWORD: postgres
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres-calendar:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: modules/api-gateway/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      AUTH_SERVICE_URL: http://auth-service:8081
+      CALENDAR_SERVICE_URL: http://calendar-service:8082
+      JWT_SECRET: replace-with-strong-secret123456
+      JWT_ACCESS_TOKEN_SECONDS: 900
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
+      - calendar-service
