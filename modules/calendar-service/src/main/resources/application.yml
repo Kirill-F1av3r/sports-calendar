@@ -1,0 +1,12 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+spring:
+  datasource:
+    url: ${CALENDAR_DB_URL:jdbc:postgresql://localhost:5432/sports_calendar}
+    username: ${CALENDAR_DB_USERNAME:postgres}
+    password: ${CALENDAR_DB_PASSWORD:1234}
+  jpa:
+    hibernate:
+      ddl-auto: ${CALENDAR_JPA_DDL_AUTO:update}
+    show-sql: ${CALENDAR_JPA_SHOW_SQL:true}

@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: ${AUTH_DB_URL}
+    username: ${AUTH_DB_USERNAME}
+    password: ${AUTH_DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: create
+    show-sql: false
+
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+    accessTokenSeconds: ${JWT_ACCESS_TOKEN_SECONDS:900}

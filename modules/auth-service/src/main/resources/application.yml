@@ -1,0 +1,17 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  datasource:
+    url: ${AUTH_DB_URL:jdbc:postgresql://localhost:5432/auth_db}
+    username: ${AUTH_DB_USERNAME:postgres}
+    password: ${AUTH_DB_PASSWORD:1234}
+  jpa:
+    hibernate:
+      ddl-auto: ${AUTH_JPA_DDL_AUTO:update}
+    show-sql: ${AUTH_JPA_SHOW_SQL:true}
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:dev-secret-change-me-32-bytes-minimum}
+    accessTokenSeconds: ${JWT_ACCESS_TOKEN_SECONDS:900}
