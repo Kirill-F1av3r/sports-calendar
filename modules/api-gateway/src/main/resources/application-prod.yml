@@ -1,0 +1,10 @@
+services:
+  auth:
+    url: ${AUTH_SERVICE_URL}
+  calendar:
+    url: ${CALENDAR_SERVICE_URL}
+
+security:
+  jwt:
+    secret: ${JWT_SECRET}
+    accessTokenSeconds: ${JWT_ACCESS_TOKEN_SECONDS:900}
