@@ -20,6 +20,7 @@
         <module>auth-service</module>
         <module>calendar-service</module>
         <module>api-gateway</module>
+        <module>export-service</module>
     </modules>
 
 </project>
