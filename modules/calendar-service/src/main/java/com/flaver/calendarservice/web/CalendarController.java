@@ -7,6 +7,7 @@ import com.flaver.calendarservice.dto.CreatedIdResponse;
 import com.flaver.calendarservice.entity.Calendar;
 import com.flaver.calendarservice.entity.Event;
 import com.flaver.calendarservice.service.CalendarService;
+import com.flaver.dto.export.CalendarExportData;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -53,5 +54,20 @@ public class CalendarController {
         UUID ownerId = UUID.fromString(userId);
         Event event = calendarService.addEvent(id, ownerId, body);
         return ResponseEntity.status(HttpStatus.CREATED).body(new CreatedIdResponse(event.getId()));
+    }
+
+    @GetMapping("/internal/{id}/access-check")
+    public ResponseEntity<Void> checkAccess(@PathVariable("id") UUID id,
+                                            @RequestHeader("X-User-Id") String userId) {
+        UUID ownerId = UUID.fromString(userId);
+        calendarService.findOwnedOrThrow(id, ownerId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/internal/{id}/export-data")
+    public ResponseEntity<CalendarExportData> exportData(@PathVariable("id") UUID id,
+                                                         @RequestHeader("X-User-Id") String userId) {
+        UUID ownerId = UUID.fromString(userId);
+        return ResponseEntity.ok(calendarService.getExportData(id, ownerId));
     }
 }

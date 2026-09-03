@@ -24,6 +24,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = {
         "services.auth.url=http://localhost:8081",
         "services.calendar.url=http://localhost:8082",
+        "services.export.url=http://localhost:8083",
+        "services.integration.url=http://localhost:8085",
         "security.jwt.secret=0123456789ABCDEF0123456789ABCDEF",
         "security.jwt.accessTokenSeconds=900"
 })

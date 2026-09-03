@@ -5,5 +5,5 @@ spring:
     password: ${CALENDAR_DB_PASSWORD}
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: validate
     show-sql: false

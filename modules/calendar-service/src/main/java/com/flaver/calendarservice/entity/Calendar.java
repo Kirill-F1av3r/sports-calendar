@@ -22,6 +22,17 @@ public class Calendar {
 
     private String sportType;
 
+    @Column(name = "season_year")
+    private Integer year;
+
+    private String goal;
+
     private Instant createdAt = Instant.now();
 
+    private Instant updatedAt = Instant.now();
+
+    @PreUpdate
+    void preUpdate() {
+        updatedAt = Instant.now();
+    }
 }

@@ -39,6 +39,9 @@ public class ProxyService {
             if (ex.getResponseHeaders() != null) {
                 responseHeaders.addAll(ex.getResponseHeaders());
             }
+            responseHeaders.remove(HttpHeaders.TRANSFER_ENCODING);
+            responseHeaders.remove(HttpHeaders.CONNECTION);
+            responseHeaders.remove(HttpHeaders.CONTENT_LENGTH);
 
             return ResponseEntity
                     .status(ex.getStatusCode())

@@ -27,6 +27,50 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-export:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_EXPORT_DB:?Set POSTGRES_EXPORT_DB in .env}
+      POSTGRES_USER: ${POSTGRES_EXPORT_USER:?Set POSTGRES_EXPORT_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_EXPORT_PASSWORD:?Set POSTGRES_EXPORT_PASSWORD in .env}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_EXPORT_USER} -d ${POSTGRES_EXPORT_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-integration:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_INTEGRATION_DB:?Set POSTGRES_INTEGRATION_DB in .env}
+      POSTGRES_USER: ${POSTGRES_INTEGRATION_USER:?Set POSTGRES_INTEGRATION_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_INTEGRATION_PASSWORD:?Set POSTGRES_INTEGRATION_PASSWORD in .env}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_INTEGRATION_USER} -d ${POSTGRES_INTEGRATION_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   auth-service:
     build:
       context: .
@@ -38,8 +82,6 @@ services:
       AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       JWT_ACCESS_TOKEN_SECONDS: ${JWT_ACCESS_TOKEN_SECONDS:-900}
-    ports:
-      - "8081:8081"
     depends_on:
       postgres-auth:
         condition: service_healthy
@@ -53,8 +95,6 @@ services:
       CALENDAR_DB_URL: ${CALENDAR_DB_URL:?Set CALENDAR_DB_URL in .env}
       CALENDAR_DB_USERNAME: ${CALENDAR_DB_USERNAME:?Set CALENDAR_DB_USERNAME in .env}
       CALENDAR_DB_PASSWORD: ${CALENDAR_DB_PASSWORD:?Set CALENDAR_DB_PASSWORD in .env}
-    ports:
-      - "8082:8082"
     depends_on:
       postgres-calendar:
         condition: service_healthy
@@ -67,6 +107,8 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:8081}
       CALENDAR_SERVICE_URL: ${CALENDAR_SERVICE_URL:-http://calendar-service:8082}
+      EXPORT_SERVICE_URL: ${EXPORT_SERVICE_URL:-http://export-service:8083}
+      INTEGRATION_SERVICE_URL: ${INTEGRATION_SERVICE_URL:-http://integration-service:8085}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       JWT_ACCESS_TOKEN_SECONDS: ${JWT_ACCESS_TOKEN_SECONDS:-900}
     ports:
@@ -74,3 +116,63 @@ services:
     depends_on:
       - auth-service
       - calendar-service
+      - export-service
+      - integration-service
+
+  integration-service:
+    build:
+      context: .
+      dockerfile: modules/integration-service/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      INTEGRATION_DB_URL: ${INTEGRATION_DB_URL:?Set INTEGRATION_DB_URL in .env}
+      INTEGRATION_DB_USERNAME: ${INTEGRATION_DB_USERNAME:?Set INTEGRATION_DB_USERNAME in .env}
+      INTEGRATION_DB_PASSWORD: ${INTEGRATION_DB_PASSWORD:?Set INTEGRATION_DB_PASSWORD in .env}
+      INTEGRATION_TOKEN_ENCRYPTION_SECRET: ${INTEGRATION_TOKEN_ENCRYPTION_SECRET:?Set INTEGRATION_TOKEN_ENCRYPTION_SECRET in .env}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:?Set GOOGLE_OAUTH_CLIENT_ID in .env}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:?Set GOOGLE_OAUTH_CLIENT_SECRET in .env}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:8080/integrations/google/callback}
+      GOOGLE_OAUTH_SCOPES: ${GOOGLE_OAUTH_SCOPES:-https://www.googleapis.com/auth/drive.file}
+    depends_on:
+      postgres-integration:
+        condition: service_healthy
+
+  export-service:
+    build:
+      context: .
+      dockerfile: modules/export-service/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      EXPORT_DB_URL: ${EXPORT_DB_URL:?Set EXPORT_DB_URL in .env}
+      EXPORT_DB_USERNAME: ${EXPORT_DB_USERNAME:?Set EXPORT_DB_USERNAME in .env}
+      EXPORT_DB_PASSWORD: ${EXPORT_DB_PASSWORD:?Set EXPORT_DB_PASSWORD in .env}
+      CALENDAR_SERVICE_URL: ${CALENDAR_SERVICE_URL:-http://calendar-service:8082}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+    depends_on:
+      postgres-export:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      calendar-service:
+        condition: service_started
+
+  export-worker-service:
+    build:
+      context: .
+      dockerfile: modules/export-worker-service/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      CALENDAR_SERVICE_URL: ${CALENDAR_SERVICE_URL:-http://calendar-service:8082}
+      EXPORT_SERVICE_URL: ${EXPORT_SERVICE_URL:-http://export-service:8083}
+      INTEGRATION_SERVICE_URL: ${INTEGRATION_SERVICE_URL:-http://integration-service:8085}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      EXPORT_WORKER_GROUP_ID: ${EXPORT_WORKER_GROUP_ID:-export-worker-service}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      export-service:
+        condition: service_started
+      calendar-service:
+        condition: service_started
+      integration-service:
+        condition: service_started

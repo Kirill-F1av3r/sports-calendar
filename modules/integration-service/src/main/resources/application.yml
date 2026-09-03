@@ -1,0 +1,24 @@
+server:
+  port: ${SERVER_PORT:8085}
+
+spring:
+  datasource:
+    url: ${INTEGRATION_DB_URL:jdbc:postgresql://localhost:5436/integration_db}
+    username: ${INTEGRATION_DB_USERNAME:postgres}
+    password: ${INTEGRATION_DB_PASSWORD:1234}
+  jpa:
+    hibernate:
+      ddl-auto: ${INTEGRATION_JPA_DDL_AUTO:validate}
+    show-sql: ${INTEGRATION_JPA_SHOW_SQL:false}
+
+google:
+  oauth:
+    client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+    client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
+    redirect-uri: ${GOOGLE_OAUTH_REDIRECT_URI:http://localhost:8080/integrations/google/callback}
+    authorization-uri: ${GOOGLE_OAUTH_AUTHORIZATION_URI:https://accounts.google.com/o/oauth2/v2/auth}
+    token-uri: ${GOOGLE_OAUTH_TOKEN_URI:https://oauth2.googleapis.com/token}
+    scopes: ${GOOGLE_OAUTH_SCOPES:https://www.googleapis.com/auth/drive.file}
+
+integration:
+  token-encryption-secret: ${INTEGRATION_TOKEN_ENCRYPTION_SECRET:dev-secret-change-me-32-bytes-min}

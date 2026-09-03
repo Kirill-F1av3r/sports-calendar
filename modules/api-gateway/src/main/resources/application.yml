@@ -6,6 +6,10 @@ services:
     url: ${AUTH_SERVICE_URL:http://localhost:8081}
   calendar:
     url: ${CALENDAR_SERVICE_URL:http://localhost:8082}
+  export:
+    url: ${EXPORT_SERVICE_URL:http://localhost:8083}
+  integration:
+    url: ${INTEGRATION_SERVICE_URL:http://localhost:8085}
 
 security:
   jwt:
