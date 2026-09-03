@@ -8,8 +8,8 @@ spring:
     password: ${AUTH_DB_PASSWORD:1234}
   jpa:
     hibernate:
-      ddl-auto: ${AUTH_JPA_DDL_AUTO:update}
-    show-sql: ${AUTH_JPA_SHOW_SQL:true}
+      ddl-auto: ${AUTH_JPA_DDL_AUTO:validate}
+    show-sql: ${AUTH_JPA_SHOW_SQL:false}
 
 security:
   jwt:

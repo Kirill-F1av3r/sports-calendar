@@ -1,0 +1,18 @@
+server:
+  port: ${SERVER_PORT:8083}
+
+spring:
+  datasource:
+    url: ${EXPORT_DB_URL:jdbc:postgresql://localhost:5435/export_db}
+    username: ${EXPORT_DB_USERNAME:postgres}
+    password: ${EXPORT_DB_PASSWORD:1234}
+  jpa:
+    hibernate:
+      ddl-auto: ${EXPORT_JPA_DDL_AUTO:validate}
+    show-sql: ${EXPORT_JPA_SHOW_SQL:false}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+services:
+  calendar:
+    url: ${CALENDAR_SERVICE_URL:http://localhost:8082}

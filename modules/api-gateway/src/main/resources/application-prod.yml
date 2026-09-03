@@ -3,6 +3,10 @@ services:
     url: ${AUTH_SERVICE_URL}
   calendar:
     url: ${CALENDAR_SERVICE_URL}
+  export:
+    url: ${EXPORT_SERVICE_URL}
+  integration:
+    url: ${INTEGRATION_SERVICE_URL}
 
 security:
   jwt:

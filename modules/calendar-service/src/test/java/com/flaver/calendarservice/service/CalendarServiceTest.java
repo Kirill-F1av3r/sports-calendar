@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -122,9 +123,11 @@ public class CalendarServiceTest {
         assertThat(event.getCalendarId()).isEqualTo(calendarId);
         assertThat(event.getTitle()).isEqualTo(title);
         assertThat(event.getSource()).isNull();
-        assertThat(event.getStartDate()).isEqualTo(LocalDate.parse(startDate));
-        assertThat(event.getEndDate()).isEqualTo(LocalDate.parse(endDate));
+        assertThat(event.getStartDateTime()).isEqualTo(LocalDate.parse(startDate).atStartOfDay());
+        assertThat(event.getEndDateTime()).isEqualTo(LocalDate.parse(endDate).atStartOfDay());
         assertThat(event.getLocation()).isEqualTo(location);
+        assertThat(event.getStatus().name()).isEqualTo("PLANNED");
+        assertThat(event.getPriority().name()).isEqualTo("C");
 
         ArgumentCaptor<Event> cap = ArgumentCaptor.forClass(Event.class);
         verify(eventRepository).save(cap.capture());
