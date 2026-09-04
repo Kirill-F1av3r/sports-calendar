@@ -5,19 +5,16 @@ import com.flaver.dto.export.CalendarExportEvent;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.util.UriUtils;
 
-import java.nio.charset.StandardCharsets;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Component
 public class GoogleSheetsClient {
     private static final String SHEETS_API_BASE_URL = "https://sheets.googleapis.com/v4/spreadsheets";
-    private static final String SHEET_TITLE = "Competitions";
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final String SHEET_TITLE = "Соревнования";
 
     private final RestClient restClient;
 
@@ -57,27 +54,25 @@ public class GoogleSheetsClient {
 
     private void writeRows(String spreadsheetId, CalendarExportData data, String accessToken) {
         List<List<Object>> values = new ArrayList<>();
-        values.add(List.of("Start", "End", "Timezone", "Title", "Distance", "Location", "Priority", "Status",
-                "Source", "URL", "Notes"));
+        values.add(List.of("Дата начала", "Дата окончания", "Название", "Уровень", "Дисциплины", "Место",
+                "Приоритет", "Ссылка"));
         for (CalendarExportEvent event : data.events()) {
             values.add(List.of(
-                    event.startDateTime() != null ? event.startDateTime().format(DATE_TIME_FORMATTER) : "",
-                    event.endDateTime() != null ? event.endDateTime().format(DATE_TIME_FORMATTER) : "",
-                    value(event.timezone()),
+                    event.startDate() != null ? event.startDate().toString() : "",
+                    event.endDate() != null ? event.endDate().toString() : "",
                     value(event.title()),
-                    value(event.distance()),
+                    value(event.competitionLevel()),
+                    disciplines(event.disciplines()),
                     value(event.location()),
                     value(event.priority()),
-                    value(event.status()),
-                    value(event.source()),
-                    value(event.externalUrl()),
-                    value(event.notes())
+                    value(event.externalUrl())
             ));
         }
 
-        String range = UriUtils.encodePathSegment(SHEET_TITLE + "!A1:K" + values.size(), StandardCharsets.UTF_8);
+        String range = "'" + SHEET_TITLE + "'!A1:H" + values.size();
         restClient.put()
-                .uri(SHEETS_API_BASE_URL + "/" + spreadsheetId + "/values/" + range + "?valueInputOption=RAW")
+                .uri(SHEETS_API_BASE_URL + "/{spreadsheetId}/values/{range}?valueInputOption=RAW",
+                        spreadsheetId, range)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                 .body(Map.of("values", values))
                 .retrieve()
@@ -89,6 +84,15 @@ public class GoogleSheetsClient {
                 ? data.calendarName().trim()
                 : "Sports Calendar Export";
         return data.year() != null ? name + " " + data.year() : name;
+    }
+
+    private String disciplines(List<String> disciplines) {
+        if (disciplines == null || disciplines.isEmpty()) {
+            return "";
+        }
+        return disciplines.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .collect(Collectors.joining(", "));
     }
 
     private String value(String value) {

@@ -3,9 +3,9 @@ package com.flaver.calendarservice.service;
 import com.flaver.calendarservice.dto.CreateCalendarRequest;
 import com.flaver.calendarservice.dto.CreateEventRequest;
 import com.flaver.calendarservice.entity.Calendar;
+import com.flaver.calendarservice.entity.CompetitionLevel;
 import com.flaver.calendarservice.entity.Event;
 import com.flaver.calendarservice.entity.EventPriority;
-import com.flaver.calendarservice.entity.EventStatus;
 import com.flaver.calendarservice.exception.ForbiddenException;
 import com.flaver.calendarservice.exception.NotFoundException;
 import com.flaver.calendarservice.repository.CalendarRepository;
@@ -16,8 +16,11 @@ import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @AllArgsConstructor
@@ -30,9 +33,8 @@ public class CalendarService {
         Calendar calendar = new Calendar();
         calendar.setOwnerId(ownerId);
         calendar.setName(request.name().trim());
-        calendar.setSportType(request.sportType());
+        calendar.setSportType(trimToNull(request.sportType()));
         calendar.setYear(request.year());
-        calendar.setGoal(trimToNull(request.goal()));
         return calendarRepository.save(calendar);
     }
 
@@ -54,80 +56,86 @@ public class CalendarService {
     @Transactional(readOnly = true)
     public List<Event> listEvents(UUID calendarId, UUID ownerId) {
         findOwnedOrThrow(calendarId, ownerId);
-        return eventRepository.findByCalendarIdOrderByStartDateTimeAsc(calendarId);
+        return eventRepository.findByCalendarIdOrderByStartDateAsc(calendarId);
     }
 
     @Transactional
     public Event addEvent(UUID calendarId, UUID ownerId, CreateEventRequest request) {
         findOwnedOrThrow(calendarId, ownerId);
 
-        var endDateTime = request.endDateTime() != null ? request.endDateTime() : request.startDateTime();
-        if (endDateTime.isBefore(request.startDateTime())) {
+        var endDate = request.endDate() != null ? request.endDate() : request.startDate();
+        if (endDate.isBefore(request.startDate())) {
             throw new IllegalArgumentException("end before start");
         }
 
         Event event = new Event();
         event.setCalendarId(calendarId);
         event.setTitle(request.title().trim());
-        event.setStartDateTime(request.startDateTime());
-        event.setEndDateTime(endDateTime);
-        event.setTimezone(request.timezone().trim());
+        event.setStartDate(request.startDate());
+        event.setEndDate(endDate);
+        event.setCompetitionLevel(parseCompetitionLevel(request.competitionLevel()));
         event.setLocation(trimToNull(request.location()));
-        event.setDistance(trimToNull(request.distance()));
-        event.setPriority(parsePriority(request.priority()));
-        event.setStatus(parseStatus(request.status()));
-        event.setSource(trimToNull(request.source()));
         event.setExternalUrl(trimToNull(request.externalUrl()));
-        event.setNotes(trimToNull(request.notes()));
+        event.setDisciplines(normalizeDisciplines(request.disciplines()));
+        event.setPriority(parsePriority(request.priority()));
         return eventRepository.save(event);
     }
 
     @Transactional(readOnly = true)
     public CalendarExportData getExportData(UUID calendarId, UUID ownerId) {
         Calendar calendar = findOwnedOrThrow(calendarId, ownerId);
-        List<CalendarExportEvent> events = eventRepository.findByCalendarIdOrderByStartDateTimeAsc(calendarId)
+        List<CalendarExportEvent> events = eventRepository.findByCalendarIdOrderByStartDateAsc(calendarId)
                 .stream()
                 .map(event -> new CalendarExportEvent(
                         event.getId(),
                         event.getTitle(),
-                        event.getStartDateTime(),
-                        event.getEndDateTime(),
-                        event.getTimezone(),
+                        event.getStartDate(),
+                        event.getEndDate(),
+                        event.getCompetitionLevel() != null ? event.getCompetitionLevel().getDisplayNameRu() : "",
                         event.getLocation(),
-                        event.getDistance(),
-                        event.getPriority() != null ? event.getPriority().name() : null,
-                        event.getStatus() != null ? event.getStatus().name() : null,
-                        event.getSource(),
+                        event.getDisciplines(),
+                        event.getPriority() != null ? event.getPriority().getDisplayNameRu() : "",
                         event.getExternalUrl(),
-                        event.getNotes()
+                        calendar.getSportType()
                 ))
                 .toList();
 
-        return new CalendarExportData(calendar.getId(), calendar.getName(), calendar.getYear(), calendar.getGoal(), events);
+        return new CalendarExportData(calendar.getId(), calendar.getName(), calendar.getSportType(), calendar.getYear(), events);
     }
 
     private EventPriority parsePriority(String value) {
         String normalized = trimToNull(value);
         if (normalized == null) {
-            return EventPriority.C;
+            return EventPriority.OPTIONAL;
         }
         try {
             return EventPriority.valueOf(normalized.toUpperCase());
         } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("priority must be A, B or C");
+            throw new IllegalArgumentException("priority must be REQUIRED, IMPORTANT or OPTIONAL");
         }
     }
 
-    private EventStatus parseStatus(String value) {
+    private CompetitionLevel parseCompetitionLevel(String value) {
         String normalized = trimToNull(value);
         if (normalized == null) {
-            return EventStatus.PLANNED;
+            return CompetitionLevel.OTHER;
         }
         try {
-            return EventStatus.valueOf(normalized.toUpperCase());
+            return CompetitionLevel.valueOf(normalized.toUpperCase());
         } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("unsupported event status");
+            throw new IllegalArgumentException("unsupported competition level");
         }
+    }
+
+    private List<String> normalizeDisciplines(List<String> disciplines) {
+        if (disciplines == null) {
+            return new ArrayList<>();
+        }
+        return disciplines.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     private String trimToNull(String value) {

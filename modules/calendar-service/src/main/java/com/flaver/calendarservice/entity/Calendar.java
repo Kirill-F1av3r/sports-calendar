@@ -25,11 +25,16 @@ public class Calendar {
     @Column(name = "season_year")
     private Integer year;
 
-    private String goal;
-
     private Instant createdAt = Instant.now();
 
     private Instant updatedAt = Instant.now();
+
+    @PrePersist
+    void prePersist() {
+        Instant now = Instant.now();
+        createdAt = now;
+        updatedAt = now;
+    }
 
     @PreUpdate
     void preUpdate() {

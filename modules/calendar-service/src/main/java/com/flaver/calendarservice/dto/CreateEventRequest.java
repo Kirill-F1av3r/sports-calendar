@@ -3,22 +3,19 @@ package com.flaver.calendarservice.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.util.List;
 
 public record CreateEventRequest(
         @NotBlank String title,
-        @NotNull LocalDateTime startDateTime,
-        LocalDateTime endDateTime,
-        @NotBlank String timezone,
+        @NotNull LocalDate startDate,
+        LocalDate endDate,
+        String competitionLevel,
         String location,
-        String distance,
-        String priority,
-        String status,
-        String source,
         String externalUrl,
-        String notes
+        List<String> disciplines,
+        String priority
 ) {
-    public CreateEventRequest(String title, LocalDate startDate, LocalDate endDate, String location, String source) {
-        this(title, startDate.atStartOfDay(), endDate.atStartOfDay(), "UTC", location, null, null, null, source, null, null);
+    public CreateEventRequest(String title, LocalDate startDate, LocalDate endDate, String location, String externalUrl) {
+        this(title, startDate, endDate, null, location, externalUrl, null, null);
     }
 }

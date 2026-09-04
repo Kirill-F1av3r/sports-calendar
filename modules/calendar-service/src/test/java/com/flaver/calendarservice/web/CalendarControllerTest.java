@@ -88,8 +88,8 @@ public class CalendarControllerTest {
         event.setId(UUID.randomUUID());
         event.setCalendarId(calendarId);
         event.setTitle("E");
-        event.setStartDateTime(LocalDate.parse("2026-05-01").atStartOfDay());
-        event.setTimezone("UTC");
+        event.setStartDate(LocalDate.parse("2026-05-01"));
+        event.setEndDate(LocalDate.parse("2026-05-02"));
 
         when(calendarService.findOwnedOrThrow(calendarId, ownerId)).thenReturn(calendar);
         when(calendarService.listEvents(calendarId, ownerId)).thenReturn(List.of(event));

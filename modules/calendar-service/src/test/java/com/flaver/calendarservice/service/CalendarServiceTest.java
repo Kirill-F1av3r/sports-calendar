@@ -3,6 +3,7 @@ package com.flaver.calendarservice.service;
 import com.flaver.calendarservice.dto.CreateCalendarRequest;
 import com.flaver.calendarservice.dto.CreateEventRequest;
 import com.flaver.calendarservice.entity.Calendar;
+import com.flaver.calendarservice.entity.CompetitionLevel;
 import com.flaver.calendarservice.entity.Event;
 import com.flaver.calendarservice.exception.ForbiddenException;
 import com.flaver.calendarservice.exception.NotFoundException;
@@ -13,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -115,19 +115,30 @@ public class CalendarServiceTest {
         when(calendarRepository.findById(calendarId)).thenReturn(Optional.of(calendar));
         when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        CreateEventRequest request = new CreateEventRequest(title, LocalDate.parse(startDate), LocalDate.parse(endDate),
-                location, null);
+        CreateEventRequest request = new CreateEventRequest(
+                title,
+                LocalDate.parse(startDate),
+                LocalDate.parse(endDate),
+                "REGIONAL",
+                location,
+                "https://example.com",
+                List.of("кросс-классика", "кросс-лонг"),
+                "REQUIRED"
+        );
         Event event = calendarService.addEvent(calendarId, ownerId, request);
 
         assertThat(event).isNotNull();
         assertThat(event.getCalendarId()).isEqualTo(calendarId);
         assertThat(event.getTitle()).isEqualTo(title);
-        assertThat(event.getSource()).isNull();
-        assertThat(event.getStartDateTime()).isEqualTo(LocalDate.parse(startDate).atStartOfDay());
-        assertThat(event.getEndDateTime()).isEqualTo(LocalDate.parse(endDate).atStartOfDay());
+        assertThat(event.getStartDate()).isEqualTo(LocalDate.parse(startDate));
+        assertThat(event.getEndDate()).isEqualTo(LocalDate.parse(endDate));
+        assertThat(event.getCompetitionLevel()).isEqualTo(CompetitionLevel.REGIONAL);
         assertThat(event.getLocation()).isEqualTo(location);
-        assertThat(event.getStatus().name()).isEqualTo("PLANNED");
-        assertThat(event.getPriority().name()).isEqualTo("C");
+        assertThat(event.getExternalUrl()).isEqualTo("https://example.com");
+        assertThat(event.getDisciplines()).containsExactly("кросс-классика", "кросс-лонг");
+        assertThat(event.getPriority().name()).isEqualTo("REQUIRED");
+        assertThat(event.getCompetitionLevel().getDisplayNameRu()).isEqualTo("региональные");
+        assertThat(event.getPriority().getDisplayNameRu()).isEqualTo("обязательный");
 
         ArgumentCaptor<Event> cap = ArgumentCaptor.forClass(Event.class);
         verify(eventRepository).save(cap.capture());

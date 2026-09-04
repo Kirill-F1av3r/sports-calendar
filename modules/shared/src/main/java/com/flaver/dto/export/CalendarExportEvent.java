@@ -1,20 +1,19 @@
 package com.flaver.dto.export;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public record CalendarExportEvent(
         UUID id,
         String title,
-        LocalDateTime startDateTime,
-        LocalDateTime endDateTime,
-        String timezone,
+        LocalDate startDate,
+        LocalDate endDate,
+        String competitionLevel,
         String location,
-        String distance,
+        List<String> disciplines,
         String priority,
-        String status,
-        String source,
         String externalUrl,
-        String notes
+        String sportType
 ) {
 }

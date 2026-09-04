@@ -5,7 +5,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -22,35 +24,43 @@ public class Event {
     @Column(nullable = false)
     private String title;
 
-    @Column(name="start_ts")
-    private LocalDateTime startDateTime;
+    @Column(name="start_date", nullable = false)
+    private LocalDate startDate;
 
-    @Column(name="end_ts")
-    private LocalDateTime endDateTime;
+    @Column(name="end_date", nullable = false)
+    private LocalDate endDate;
 
-    @Column(nullable = false)
-    private String timezone;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "competition_level")
+    private CompetitionLevel competitionLevel;
 
     private String location;
 
-    private String distance;
+    @Column(length = 500)
+    private String externalUrl;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "event_disciplines",
+            joinColumns = @JoinColumn(name = "event_id")
+    )
+    @OrderColumn(name = "position")
+    @Column(name = "discipline", nullable = false)
+    private List<String> disciplines = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     private EventPriority priority;
 
-    @Enumerated(EnumType.STRING)
-    private EventStatus status;
-
-    private String source;
-
-    private String externalUrl;
-
-    @Column(length = 2000)
-    private String notes;
-
     private Instant createdAt = Instant.now();
 
     private Instant updatedAt = Instant.now();
+
+    @PrePersist
+    void prePersist() {
+        Instant now = Instant.now();
+        createdAt = now;
+        updatedAt = now;
+    }
 
     @PreUpdate
     void preUpdate() {

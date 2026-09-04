@@ -6,8 +6,8 @@ import java.util.UUID;
 public record CalendarExportData(
         UUID calendarId,
         String calendarName,
+        String sportType,
         Integer year,
-        String goal,
         List<CalendarExportEvent> events
 ) {
 }
