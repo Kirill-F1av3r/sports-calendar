@@ -15,3 +15,8 @@ security:
   jwt:
     secret: ${JWT_SECRET:dev-secret-change-me-32-bytes-minimum}
     accessTokenSeconds: ${JWT_ACCESS_TOKEN_SECONDS:900}
+    refreshTokenSeconds: ${JWT_REFRESH_TOKEN_SECONDS:2592000}
+  cookies:
+    refreshToken:
+      secure: ${REFRESH_TOKEN_COOKIE_SECURE:false}
+      sameSite: ${REFRESH_TOKEN_COOKIE_SAME_SITE:Lax}

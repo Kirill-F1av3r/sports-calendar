@@ -1,6 +1,8 @@
 package com.flaver.authservice.service;
 
+import com.flaver.authservice.entity.RefreshToken;
 import com.flaver.authservice.entity.User;
+import com.flaver.authservice.repository.RefreshTokenRepository;
 import com.flaver.authservice.repository.UserRepository;
 import com.flaver.security.JwtUtils;
 import io.jsonwebtoken.Claims;
@@ -10,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,15 +25,18 @@ public class AuthServiceTest {
     private AuthService authService;
     private PasswordEncoder passwordEncoder;
     private UserRepository userRepository;
+    private RefreshTokenRepository refreshTokenRepository;
 
     private static final String SECRET = "0123456789ABCDEF0123456789ABCDEF";
     private static final long TTL = 900L;
+    private static final long REFRESH_TTL = 2_592_000L;
 
     @BeforeEach
     void setUp() {
         userRepository = mock(UserRepository.class);
+        refreshTokenRepository = mock(RefreshTokenRepository.class);
         passwordEncoder = new BCryptPasswordEncoder();
-        authService = new AuthService(userRepository, passwordEncoder, SECRET, TTL);
+        authService = new AuthService(userRepository, refreshTokenRepository, passwordEncoder, SECRET, TTL, REFRESH_TTL);
     }
 
     @Test
@@ -79,18 +85,32 @@ public class AuthServiceTest {
 
         when(userRepository.findByEmail(u.getEmail())).thenReturn(Optional.of(u));
 
-        String token = authService.login(u.getEmail(), "password");
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        assertNotNull(token);
-        assertFalse(token.isBlank());
+        AuthService.AuthTokens tokens = authService.login(u.getEmail(), "password");
+
+        assertNotNull(tokens.accessToken());
+        assertFalse(tokens.accessToken().isBlank());
+        assertNotNull(tokens.refreshToken());
+        assertFalse(tokens.refreshToken().isBlank());
+        assertEquals(TTL, tokens.accessTokenSeconds());
+        assertEquals(REFRESH_TTL, tokens.refreshTokenSeconds());
 
         JwtUtils jwtUtils = new JwtUtils(SECRET, TTL);
-        Jws<Claims> jws = jwtUtils.parseToken(token);
+        Jws<Claims> jws = jwtUtils.parseToken(tokens.accessToken());
         var claims = jws.getBody();
         assertEquals(id.toString(), claims.getSubject());
         Object rolesObj = claims.get("roles");
         assertNotNull(rolesObj);
         assertTrue(rolesObj.toString().contains("USER"));
+
+        verify(refreshTokenRepository).save(argThat(refreshToken ->
+                refreshToken.getUserId().equals(id)
+                        && refreshToken.getTokenHash() != null
+                        && refreshToken.getTokenHash().length() == 64
+                        && !refreshToken.getTokenHash().equals(tokens.refreshToken())
+                        && refreshToken.getExpiresAt().isAfter(Instant.now())
+        ));
     }
 
     @Test
@@ -108,4 +128,49 @@ public class AuthServiceTest {
         assertThrows(RuntimeException.class, () -> authService.login(u.getEmail(), "wrong"));
     }
 
+    @Test
+    void refresh_success_rotatesRefreshToken() {
+        UUID userId = UUID.randomUUID();
+
+        RefreshToken existingRefreshToken = new RefreshToken();
+        existingRefreshToken.setUserId(userId);
+        existingRefreshToken.setTokenHash("hash");
+        existingRefreshToken.setExpiresAt(Instant.now().plusSeconds(60));
+
+        User user = new User();
+        user.setId(userId);
+        user.setRoles("USER");
+
+        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(existingRefreshToken));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AuthService.AuthTokens tokens = authService.refresh("refresh-token");
+
+        assertNotNull(tokens.accessToken());
+        assertNotNull(tokens.refreshToken());
+        assertNotEquals("refresh-token", tokens.refreshToken());
+        assertNotNull(existingRefreshToken.getRevokedAt());
+
+        verify(refreshTokenRepository).findByTokenHash(argThat(hash -> hash != null && hash.length() == 64));
+        verify(refreshTokenRepository).save(argThat(refreshToken ->
+                refreshToken.getUserId().equals(userId)
+                        && refreshToken.getRevokedAt() == null
+                        && refreshToken.getExpiresAt().isAfter(Instant.now())
+        ));
+    }
+
+    @Test
+    void refresh_revokedToken_throws() {
+        RefreshToken refreshToken = new RefreshToken();
+        refreshToken.setUserId(UUID.randomUUID());
+        refreshToken.setTokenHash("hash");
+        refreshToken.setExpiresAt(Instant.now().plusSeconds(60));
+        refreshToken.setRevokedAt(Instant.now());
+
+        when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(refreshToken));
+
+        assertThrows(RuntimeException.class, () -> authService.refresh("refresh-token"));
+        verify(refreshTokenRepository, never()).save(any());
+    }
 }

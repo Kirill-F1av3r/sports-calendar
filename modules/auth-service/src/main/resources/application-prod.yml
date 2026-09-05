@@ -12,3 +12,8 @@ security:
   jwt:
     secret: ${JWT_SECRET}
     accessTokenSeconds: ${JWT_ACCESS_TOKEN_SECONDS:900}
+    refreshTokenSeconds: ${JWT_REFRESH_TOKEN_SECONDS:2592000}
+  cookies:
+    refreshToken:
+      secure: ${REFRESH_TOKEN_COOKIE_SECURE:true}
+      sameSite: ${REFRESH_TOKEN_COOKIE_SAME_SITE:Lax}
