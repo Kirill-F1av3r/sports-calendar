@@ -66,7 +66,7 @@ public class CalendarControllerTest {
         calendar.setOwnerId(ownerId);
         calendar.setName("A");
 
-        when(calendarService.findAllByOwnerId(ownerId)).thenReturn(List.of(calendar));
+        when(calendarService.findCalendars(eq(ownerId), any(), any(), any(), any())).thenReturn(List.of(calendar));
 
         mockMvc.perform(get("/calendars")
                         .header("X-User-Id", ownerId.toString()))
@@ -76,7 +76,7 @@ public class CalendarControllerTest {
     }
 
     @Test
-    void get_returnsCalendarAndEvents() throws Exception {
+    void get_returnsCalendarOnly() throws Exception {
         UUID ownerId = UUID.randomUUID();
         UUID calendarId = UUID.randomUUID();
         Calendar calendar = new Calendar();
@@ -84,21 +84,14 @@ public class CalendarControllerTest {
         calendar.setOwnerId(ownerId);
         calendar.setName("C");
 
-        Event event = new Event();
-        event.setId(UUID.randomUUID());
-        event.setCalendarId(calendarId);
-        event.setTitle("E");
-        event.setStartDate(LocalDate.parse("2026-05-01"));
-        event.setEndDate(LocalDate.parse("2026-05-02"));
-
         when(calendarService.findOwnedOrThrow(calendarId, ownerId)).thenReturn(calendar);
-        when(calendarService.listEvents(calendarId, ownerId)).thenReturn(List.of(event));
 
         mockMvc.perform(get("/calendars/" + calendarId)
                         .header("X-User-Id", ownerId.toString()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.calendar.id").value(calendarId.toString()))
-                .andExpect(jsonPath("$.events[0].title").value("E"));
+                .andExpect(jsonPath("$.id").value(calendarId.toString()))
+                .andExpect(jsonPath("$.name").value("C"))
+                .andExpect(jsonPath("$.events").doesNotExist());
     }
 
     @Test
@@ -111,6 +104,10 @@ public class CalendarControllerTest {
                 .thenAnswer(inv -> {
                     Event ev = new Event();
                     ev.setId(eventId);
+                    ev.setCalendarId(calendarId);
+                    ev.setTitle("Title");
+                    ev.setStartDate(LocalDate.parse("2026-05-01"));
+                    ev.setEndDate(LocalDate.parse("2026-05-02"));
                     return ev;
                 });
 

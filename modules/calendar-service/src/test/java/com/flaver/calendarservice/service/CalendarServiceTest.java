@@ -9,6 +9,8 @@ import com.flaver.calendarservice.exception.ForbiddenException;
 import com.flaver.calendarservice.exception.NotFoundException;
 import com.flaver.calendarservice.repository.CalendarRepository;
 import com.flaver.calendarservice.repository.EventRepository;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.domain.Sort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -65,12 +67,12 @@ public class CalendarServiceTest {
         c2.setOwnerId(ownerId);
         c2.setName("B");
 
-        when(calendarRepository.findByOwnerId(ownerId)).thenReturn(List.of(c1, c2));
+        when(calendarRepository.findAll(any(Specification.class), any(Sort.class))).thenReturn(List.of(c1, c2));
 
-        var list = calendarService.findAllByOwnerId(ownerId);
+        var list = calendarService.findCalendars(ownerId, null, null, null, null);
 
         assertThat(list).hasSize(2).containsExactly(c1, c2);
-        verify(calendarRepository).findByOwnerId(ownerId);
+        verify(calendarRepository).findAll(any(Specification.class), any(Sort.class));
     }
 
     @Test

@@ -46,6 +46,12 @@ public class GatewayController {
         return forwardRequest(request, headers, calendarServiceUrl, true);
     }
 
+    @RequestMapping("/calendar-metadata")
+    public ResponseEntity<byte[]> proxyCalendarMetadata(HttpServletRequest request,
+                                                        @RequestHeader HttpHeaders headers) throws IOException {
+        return forwardRequest(request, headers, calendarServiceUrl, false);
+    }
+
     @RequestMapping("/exports/**")
     public ResponseEntity<byte[]> proxyExports(HttpServletRequest request,
                                                @RequestHeader HttpHeaders headers) throws IOException {
@@ -69,6 +75,10 @@ public class GatewayController {
                                                   String serviceUrl,
                                                   boolean requiresJwt) throws IOException {
         HttpMethod method = HttpMethod.valueOf(request.getMethod());
+        if (method == HttpMethod.OPTIONS) {
+            return ResponseEntity.noContent().build();
+        }
+
         String pathAndQuery = request.getRequestURI() +
                 (request.getQueryString() != null ? "?" + request.getQueryString() : "");
 

@@ -1,5 +1,6 @@
 package com.flaver.apigateway.web;
 
+import com.flaver.apigateway.config.CorsProperties;
 import com.flaver.apigateway.config.SecurityConfig;
 import com.flaver.apigateway.security.JwtService;
 import com.flaver.apigateway.service.ProxyService;
@@ -20,14 +21,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(GatewayController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, CorsProperties.class})
 @TestPropertySource(properties = {
         "services.auth.url=http://localhost:8081",
         "services.calendar.url=http://localhost:8082",
         "services.export.url=http://localhost:8083",
         "services.integration.url=http://localhost:8085",
         "security.jwt.secret=0123456789ABCDEF0123456789ABCDEF",
-        "security.jwt.accessTokenSeconds=900"
+        "security.jwt.accessTokenSeconds=900",
+        "app.cors.allowed-origins=http://localhost:5173"
 })
 class GatewayControllerTest {
 
