@@ -6,7 +6,9 @@ import com.flaver.calendarservice.dto.CreateCalendarRequest;
 import com.flaver.calendarservice.dto.CreateEventRequest;
 import com.flaver.calendarservice.entity.Calendar;
 import com.flaver.calendarservice.entity.Event;
+import com.flaver.calendarservice.service.CalendarExportService;
 import com.flaver.calendarservice.service.CalendarService;
+import com.flaver.calendarservice.service.EventService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -27,13 +29,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 public class CalendarControllerTest {
     private CalendarService calendarService;
+    private EventService eventService;
+    private CalendarExportService calendarExportService;
     private MockMvc mockMvc;
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @BeforeEach
     void setUp() {
         calendarService = mock(CalendarService.class);
-        CalendarController calendarController = new CalendarController(calendarService);
+        eventService = mock(EventService.class);
+        calendarExportService = mock(CalendarExportService.class);
+        CalendarController calendarController = new CalendarController(calendarService, eventService, calendarExportService);
         mockMvc = MockMvcBuilders.standaloneSetup(calendarController).build();
     }
 
@@ -100,7 +106,7 @@ public class CalendarControllerTest {
         UUID calendarId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
 
-        when(calendarService.addEvent(eq(calendarId), eq(ownerId), any(CreateEventRequest.class)))
+        when(eventService.addEvent(eq(calendarId), eq(ownerId), any(CreateEventRequest.class)))
                 .thenAnswer(inv -> {
                     Event ev = new Event();
                     ev.setId(eventId);

@@ -10,7 +10,9 @@ import com.flaver.calendarservice.dto.UpdateCalendarRequest;
 import com.flaver.calendarservice.dto.UpdateEventRequest;
 import com.flaver.calendarservice.entity.Calendar;
 import com.flaver.calendarservice.entity.Event;
+import com.flaver.calendarservice.service.CalendarExportService;
 import com.flaver.calendarservice.service.CalendarService;
+import com.flaver.calendarservice.service.EventService;
 import com.flaver.dto.export.CalendarExportData;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
@@ -29,6 +31,8 @@ import java.util.UUID;
 @AllArgsConstructor
 public class CalendarController {
     private final CalendarService calendarService;
+    private final EventService eventService;
+    private final CalendarExportService calendarExportService;
 
     @PostMapping
     public ResponseEntity<CalendarResponse> createCalendar(@RequestHeader("X-User-Id") String userId,
@@ -90,7 +94,7 @@ public class CalendarController {
             @RequestParam(name = "size", required = false) Integer size,
             @RequestParam(name = "sort", required = false) String sort) {
         UUID ownerId = UUID.fromString(userId);
-        Page<EventResponse> events = calendarService.findEvents(id, ownerId, from, to, competitionLevel, priority,
+        Page<EventResponse> events = eventService.findEvents(id, ownerId, from, to, competitionLevel, priority,
                         search, page, size, sort)
                 .map(CalendarMapper::toEventResponse);
         return ResponseEntity.ok(new PageResponse<>(
@@ -108,7 +112,7 @@ public class CalendarController {
                                                   @PathVariable("eventId") UUID eventId,
                                                   @RequestHeader("X-User-Id") String userId) {
         UUID ownerId = UUID.fromString(userId);
-        Event event = calendarService.findOwnedEventOrThrow(calendarId, eventId, ownerId);
+        Event event = eventService.findOwnedEventOrThrow(calendarId, eventId, ownerId);
         return ResponseEntity.ok(CalendarMapper.toEventResponse(event));
     }
 
@@ -117,7 +121,7 @@ public class CalendarController {
                                                   @RequestHeader("X-User-Id") String userId,
                                                   @Valid @RequestBody CreateEventRequest body) {
         UUID ownerId = UUID.fromString(userId);
-        Event event = calendarService.addEvent(id, ownerId, body);
+        Event event = eventService.addEvent(id, ownerId, body);
         return ResponseEntity.status(HttpStatus.CREATED).body(CalendarMapper.toEventResponse(event));
     }
 
@@ -127,7 +131,7 @@ public class CalendarController {
                                                      @RequestHeader("X-User-Id") String userId,
                                                      @RequestBody UpdateEventRequest body) {
         UUID ownerId = UUID.fromString(userId);
-        Event event = calendarService.updateEvent(calendarId, eventId, ownerId, body);
+        Event event = eventService.updateEvent(calendarId, eventId, ownerId, body);
         return ResponseEntity.ok(CalendarMapper.toEventResponse(event));
     }
 
@@ -136,7 +140,7 @@ public class CalendarController {
                                             @PathVariable("eventId") UUID eventId,
                                             @RequestHeader("X-User-Id") String userId) {
         UUID ownerId = UUID.fromString(userId);
-        calendarService.deleteEvent(calendarId, eventId, ownerId);
+        eventService.deleteEvent(calendarId, eventId, ownerId);
         return ResponseEntity.noContent().build();
     }
 
@@ -152,6 +156,6 @@ public class CalendarController {
     public ResponseEntity<CalendarExportData> exportData(@PathVariable("id") UUID id,
                                                          @RequestHeader("X-User-Id") String userId) {
         UUID ownerId = UUID.fromString(userId);
-        return ResponseEntity.ok(calendarService.getExportData(id, ownerId));
+        return ResponseEntity.ok(calendarExportService.getExportData(id, ownerId));
     }
 }
