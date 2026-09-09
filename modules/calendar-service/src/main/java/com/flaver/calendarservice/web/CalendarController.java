@@ -1,19 +1,28 @@
 package com.flaver.calendarservice.web;
 
-import com.flaver.calendarservice.dto.CalendarDetailsResponse;
+import com.flaver.calendarservice.dto.CalendarMapper;
+import com.flaver.calendarservice.dto.CalendarResponse;
 import com.flaver.calendarservice.dto.CreateCalendarRequest;
 import com.flaver.calendarservice.dto.CreateEventRequest;
-import com.flaver.calendarservice.dto.CreatedIdResponse;
+import com.flaver.calendarservice.dto.EventResponse;
+import com.flaver.calendarservice.dto.PageResponse;
+import com.flaver.calendarservice.dto.UpdateCalendarRequest;
+import com.flaver.calendarservice.dto.UpdateEventRequest;
 import com.flaver.calendarservice.entity.Calendar;
 import com.flaver.calendarservice.entity.Event;
+import com.flaver.calendarservice.service.CalendarExportService;
 import com.flaver.calendarservice.service.CalendarService;
+import com.flaver.calendarservice.service.EventService;
 import com.flaver.dto.export.CalendarExportData;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,38 +31,117 @@ import java.util.UUID;
 @AllArgsConstructor
 public class CalendarController {
     private final CalendarService calendarService;
+    private final EventService eventService;
+    private final CalendarExportService calendarExportService;
 
     @PostMapping
-    public ResponseEntity<CreatedIdResponse> createCalendar(@RequestHeader("X-User-Id") String userId,
-                                                            @Valid @RequestBody CreateCalendarRequest body) {
+    public ResponseEntity<CalendarResponse> createCalendar(@RequestHeader("X-User-Id") String userId,
+                                                           @Valid @RequestBody CreateCalendarRequest body) {
         UUID ownerId = UUID.fromString(userId);
         Calendar calendar = calendarService.createCalendar(ownerId, body);
-        return ResponseEntity.status(HttpStatus.CREATED).body(new CreatedIdResponse(calendar.getId()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(CalendarMapper.toCalendarResponse(calendar));
     }
 
     @GetMapping
-    public ResponseEntity<List<Calendar>> list(@RequestHeader("X-User-Id") String userId) {
+    public ResponseEntity<List<CalendarResponse>> list(@RequestHeader("X-User-Id") String userId,
+                                                       @RequestParam(name = "year", required = false) Integer year,
+                                                       @RequestParam(name = "sportType", required = false) String sportType,
+                                                       @RequestParam(name = "search", required = false) String search,
+                                                       @RequestParam(name = "sort", required = false) String sort) {
         UUID ownerId = UUID.fromString(userId);
-        List<Calendar> list = calendarService.findAllByOwnerId(ownerId);
+        List<CalendarResponse> list = calendarService.findCalendars(ownerId, year, sportType, search, sort)
+                .stream()
+                .map(CalendarMapper::toCalendarResponse)
+                .toList();
         return ResponseEntity.ok(list);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<CalendarDetailsResponse> get(@PathVariable("id") UUID id,
-                                                       @RequestHeader("X-User-Id") String userId) {
+    public ResponseEntity<CalendarResponse> get(@PathVariable("id") UUID id,
+                                                @RequestHeader("X-User-Id") String userId) {
         UUID ownerId = UUID.fromString(userId);
         Calendar calendar = calendarService.findOwnedOrThrow(id, ownerId);
-        List<Event> events = calendarService.listEvents(id, ownerId);
-        return ResponseEntity.ok(new CalendarDetailsResponse(calendar, events));
+        return ResponseEntity.ok(CalendarMapper.toCalendarResponse(calendar));
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<CalendarResponse> updateCalendar(@PathVariable("id") UUID id,
+                                                           @RequestHeader("X-User-Id") String userId,
+                                                           @RequestBody UpdateCalendarRequest body) {
+        UUID ownerId = UUID.fromString(userId);
+        Calendar calendar = calendarService.updateCalendar(id, ownerId, body);
+        return ResponseEntity.ok(CalendarMapper.toCalendarResponse(calendar));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteCalendar(@PathVariable("id") UUID id,
+                                               @RequestHeader("X-User-Id") String userId) {
+        UUID ownerId = UUID.fromString(userId);
+        calendarService.deleteCalendar(id, ownerId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/events")
+    public ResponseEntity<PageResponse<EventResponse>> listEvents(
+            @PathVariable("id") UUID id,
+            @RequestHeader("X-User-Id") String userId,
+            @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(name = "competitionLevel", required = false) String competitionLevel,
+            @RequestParam(name = "priority", required = false) String priority,
+            @RequestParam(name = "search", required = false) String search,
+            @RequestParam(name = "page", required = false) Integer page,
+            @RequestParam(name = "size", required = false) Integer size,
+            @RequestParam(name = "sort", required = false) String sort) {
+        UUID ownerId = UUID.fromString(userId);
+        Page<EventResponse> events = eventService.findEvents(id, ownerId, from, to, competitionLevel, priority,
+                        search, page, size, sort)
+                .map(CalendarMapper::toEventResponse);
+        return ResponseEntity.ok(new PageResponse<>(
+                events.getContent(),
+                events.getNumber(),
+                events.getSize(),
+                events.getTotalElements(),
+                events.getTotalPages(),
+                events.isLast()
+        ));
+    }
+
+    @GetMapping("/{calendarId}/events/{eventId}")
+    public ResponseEntity<EventResponse> getEvent(@PathVariable("calendarId") UUID calendarId,
+                                                  @PathVariable("eventId") UUID eventId,
+                                                  @RequestHeader("X-User-Id") String userId) {
+        UUID ownerId = UUID.fromString(userId);
+        Event event = eventService.findOwnedEventOrThrow(calendarId, eventId, ownerId);
+        return ResponseEntity.ok(CalendarMapper.toEventResponse(event));
     }
 
     @PostMapping("/{id}/events")
-    public ResponseEntity<CreatedIdResponse> addEvent(@PathVariable("id") UUID id,
-                                                      @RequestHeader("X-User-Id") String userId,
-                                                      @Valid @RequestBody CreateEventRequest body) {
+    public ResponseEntity<EventResponse> addEvent(@PathVariable("id") UUID id,
+                                                  @RequestHeader("X-User-Id") String userId,
+                                                  @Valid @RequestBody CreateEventRequest body) {
         UUID ownerId = UUID.fromString(userId);
-        Event event = calendarService.addEvent(id, ownerId, body);
-        return ResponseEntity.status(HttpStatus.CREATED).body(new CreatedIdResponse(event.getId()));
+        Event event = eventService.addEvent(id, ownerId, body);
+        return ResponseEntity.status(HttpStatus.CREATED).body(CalendarMapper.toEventResponse(event));
+    }
+
+    @PatchMapping("/{calendarId}/events/{eventId}")
+    public ResponseEntity<EventResponse> updateEvent(@PathVariable("calendarId") UUID calendarId,
+                                                     @PathVariable("eventId") UUID eventId,
+                                                     @RequestHeader("X-User-Id") String userId,
+                                                     @RequestBody UpdateEventRequest body) {
+        UUID ownerId = UUID.fromString(userId);
+        Event event = eventService.updateEvent(calendarId, eventId, ownerId, body);
+        return ResponseEntity.ok(CalendarMapper.toEventResponse(event));
+    }
+
+    @DeleteMapping("/{calendarId}/events/{eventId}")
+    public ResponseEntity<Void> deleteEvent(@PathVariable("calendarId") UUID calendarId,
+                                            @PathVariable("eventId") UUID eventId,
+                                            @RequestHeader("X-User-Id") String userId) {
+        UUID ownerId = UUID.fromString(userId);
+        eventService.deleteEvent(calendarId, eventId, ownerId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/internal/{id}/access-check")
@@ -68,6 +156,6 @@ public class CalendarController {
     public ResponseEntity<CalendarExportData> exportData(@PathVariable("id") UUID id,
                                                          @RequestHeader("X-User-Id") String userId) {
         UUID ownerId = UUID.fromString(userId);
-        return ResponseEntity.ok(calendarService.getExportData(id, ownerId));
+        return ResponseEntity.ok(calendarExportService.getExportData(id, ownerId));
     }
 }

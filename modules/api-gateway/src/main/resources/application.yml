@@ -15,3 +15,7 @@ security:
   jwt:
     secret: ${JWT_SECRET:dev-secret-change-me-32-bytes-minimum}
     accessTokenSeconds: ${JWT_ACCESS_TOKEN_SECONDS:900}
+
+app:
+  cors:
+    allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
