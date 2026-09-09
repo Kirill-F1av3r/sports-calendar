@@ -72,6 +72,17 @@ class GatewayControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string("proxied-for-user-123"));
     }
+
+    @Test
+    void shouldProxyCalendarMetadataWithoutJwt() throws Exception {
+        given(proxyService.forward(anyString(), any(), any(), any()))
+                .willReturn(ResponseEntity.ok("metadata".getBytes()));
+
+        mockMvc.perform(get("/calendars/metadata"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("metadata"));
+    }
+
     @Test
     void shouldReturnDownstreamStatusAndBody() throws Exception {
         given(jwtService.extractUserId("good-token")).willReturn("user-123");

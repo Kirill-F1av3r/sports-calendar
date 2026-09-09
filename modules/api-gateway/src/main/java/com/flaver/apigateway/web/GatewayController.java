@@ -46,7 +46,7 @@ public class GatewayController {
         return forwardRequest(request, headers, calendarServiceUrl, true);
     }
 
-    @RequestMapping("/calendar-metadata")
+    @RequestMapping("/calendars/metadata")
     public ResponseEntity<byte[]> proxyCalendarMetadata(HttpServletRequest request,
                                                         @RequestHeader HttpHeaders headers) throws IOException {
         return forwardRequest(request, headers, calendarServiceUrl, false);
