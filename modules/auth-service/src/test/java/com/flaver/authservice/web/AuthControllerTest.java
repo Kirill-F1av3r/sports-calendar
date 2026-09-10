@@ -44,7 +44,7 @@ public class AuthControllerTest {
                     return u;
                 });
 
-        var payload = Map.of("email", "a@b.com", "password", "pw", "fullName", "X");
+        var payload = Map.of("email", "a@b.com", "password", "password123", "fullName", "X");
 
         mockMvc.perform(post("/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)

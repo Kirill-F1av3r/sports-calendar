@@ -69,7 +69,7 @@ public class CalendarController {
     @PatchMapping("/{id}")
     public ResponseEntity<CalendarResponse> updateCalendar(@PathVariable("id") UUID id,
                                                            @RequestHeader("X-User-Id") String userId,
-                                                           @RequestBody UpdateCalendarRequest body) {
+                                                           @Valid @RequestBody UpdateCalendarRequest body) {
         UUID ownerId = UUID.fromString(userId);
         Calendar calendar = calendarService.updateCalendar(id, ownerId, body);
         return ResponseEntity.ok(CalendarMapper.toCalendarResponse(calendar));
@@ -146,7 +146,7 @@ public class CalendarController {
     public ResponseEntity<EventResponse> updateEvent(@PathVariable("calendarId") UUID calendarId,
                                                      @PathVariable("eventId") UUID eventId,
                                                      @RequestHeader("X-User-Id") String userId,
-                                                     @RequestBody UpdateEventRequest body) {
+                                                     @Valid @RequestBody UpdateEventRequest body) {
         UUID ownerId = UUID.fromString(userId);
         Event event = eventService.updateEvent(calendarId, eventId, ownerId, body);
         return ResponseEntity.ok(CalendarMapper.toEventResponse(event));

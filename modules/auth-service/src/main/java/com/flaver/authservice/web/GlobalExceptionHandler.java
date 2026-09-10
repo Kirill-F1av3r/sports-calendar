@@ -33,7 +33,7 @@ public class GlobalExceptionHandler {
                 .map(FieldError::getDefaultMessage)
                 .toList();
         return ResponseEntity.badRequest()
-                .body(new ErrorResponse("VALIDATION_ERROR", "Request validation failed", details));
+                .body(new ErrorResponse("VALIDATION_ERROR", "Ошибка валидации запроса", details));
     }
 
     @ExceptionHandler(Throwable.class)

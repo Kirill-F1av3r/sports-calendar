@@ -33,7 +33,7 @@ public class InternalExportController {
 
     @PostMapping("/{jobId}/failed")
     public ResponseEntity<Void> markFailed(@PathVariable("jobId") UUID jobId,
-                                           @RequestBody FailExportRequest request) {
+                                           @Valid @RequestBody FailExportRequest request) {
         exportJobService.markFailed(jobId, request);
         return ResponseEntity.noContent().build();
     }
