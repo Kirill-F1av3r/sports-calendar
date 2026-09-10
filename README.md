@@ -720,6 +720,8 @@ GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8080/integrations/google/callback
 INTEGRATION_TOKEN_ENCRYPTION_SECRET
 ```
 
+`JWT_SECRET` в `.env` должен быть не короче 32 ASCII-символов. Иначе `auth-service` и `api-gateway` не стартуют из-за `WeakKeyException`.
+
 Затем:
 
 ```bash
@@ -730,6 +732,7 @@ docker compose up --build
 
 | Service | Internal port | Published port |
 | --- | --- | --- |
+| frontend | `5173` | `5173` |
 | api-gateway | `8080` | `8080` |
 | auth-service | `8081` | - |
 | calendar-service | `8082` | - |
@@ -741,6 +744,53 @@ docker compose up --build
 | postgres-export | `5432` | - |
 | postgres-integration | `5432` | - |
 | kafka | `9092` | - |
+
+## Frontend app
+
+Frontend находится в директории:
+
+```text
+frontend/
+```
+
+Технологии:
+
+- Vite
+- React
+- TypeScript
+- обычный CSS
+
+Запуск вместе со всем проектом:
+
+```bash
+docker compose up --build
+```
+
+Открыть:
+
+```text
+http://localhost:5173
+```
+
+Запуск frontend локально при уже поднятом backend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend по умолчанию ходит в gateway:
+
+```text
+http://localhost:8080
+```
+
+Адрес gateway можно изменить через:
+
+```text
+VITE_API_BASE_URL=http://localhost:8080
+```
 
 ## Frontend/CORS
 

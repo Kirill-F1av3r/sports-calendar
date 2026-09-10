@@ -5,6 +5,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.net.URI;
+
 @Service
 public class ProxyService {
 
@@ -25,7 +27,7 @@ public class ProxyService {
 
         RestClient.RequestBodySpec requestSpec = restClient
                 .method(method)
-                .uri(targetUrl)
+                .uri(URI.create(targetUrl))
                 .headers(httpHeaders -> httpHeaders.addAll(headersToForward));
 
         RestClient.ResponseSpec responseSpec = body != null

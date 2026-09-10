@@ -123,6 +123,17 @@ services:
       - export-service
       - integration-service
 
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api-gateway
+
   integration-service:
     build:
       context: .
