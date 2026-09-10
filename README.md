@@ -1,49 +1,58 @@
 # Sports Calendar
 
-Backend-проект для планирования спортивного календаря соревнований и экспорта календаря в Google Sheets.
+Backend project для планирования спортивного календаря соревнований и экспорта календаря в Google Sheets.
 
-Пользователь может:
+Проект позволяет:
 
-- зарегистрироваться и войти в систему;
-- создать календарь на конкретный год и вид спорта;
-- добавить соревнования с датами, уровнем (например всероссийские, региональные и тд), дисциплинами, местом, ссылкой и приоритетом;
+- регистрировать пользователей и авторизовываться;
+- создавать спортивные календари по виду спорта и году;
+- добавлять соревнования с датами, уровнем, местом, ссылкой, дисциплинами и приоритетом;
 - просматривать события с фильтрацией, поиском, сортировкой и пагинацией;
-- подключить Google account;
-- асинхронно экспортировать календарь в Google Sheets.
+- создавать новый календарь из отфильтрованной выборки событий;
+- подключать Google account через OAuth;
+- асинхронно экспортировать календарь в Google Sheets;
+- проверять API через простой frontend.
 
 ## Стек
 
 - Java 21
 - Spring Boot 3
-- Spring Data JPA
 - Spring Security
+- Spring Data JPA
 - PostgreSQL
 - Flyway
 - Kafka
 - Docker Compose
 - Maven
+- Frontend: Vite, React, TypeScript, CSS
 
 ## Архитектура
 
 ```text
-Client / Frontend
-  -> API Gateway
-    -> Auth Service
-    -> Calendar Service
-    -> Export Service
-    -> Integration Service
+Frontend / Postman
+        |
+        v
+API Gateway :8080
+        |
+        +--> Auth Service
+        +--> Calendar Service
+        +--> Export Service
+        +--> Integration Service
 
 Kafka
-  -> Export Worker Service
+        |
+        v
+Export Worker Service
 ```
 
-Снаружи публикуется только API Gateway:
+Снаружи публикуются:
 
-```text
-http://localhost:8080
-```
+| Service | URL |
+| --- | --- |
+| Frontend | `http://localhost:5173` |
+| API Gateway | `http://localhost:8080` |
 
-Остальные сервисы доступны внутри docker network.
+Остальные backend-сервисы доступны только внутри Docker network.
 
 ## Сервисы
 
@@ -54,14 +63,14 @@ http://localhost:8080
 Отвечает за:
 
 - проксирование запросов во внутренние сервисы;
-- проверку JWT access token для приватных маршрутов;
+- проверку JWT access token для защищённых маршрутов;
 - удаление входящего `X-User-Id` от клиента;
 - установку доверенного `X-User-Id` на основе JWT;
 - CORS для браузерного frontend.
 
 Маршрутизация:
 
-| Gateway path | Service | Auth |
+| Gateway path | Target service | Auth |
 | --- | --- | --- |
 | `/auth/**` | `auth-service` | public |
 | `/calendars/metadata` | `calendar-service` | public |
@@ -72,9 +81,9 @@ http://localhost:8080
 
 ### auth-service
 
-Отвечает за пользователей и токены:
+Отвечает за:
 
-- регистрация;
+- регистрацию;
 - login;
 - BCrypt-хэширование паролей;
 - выпуск JWT access token;
@@ -89,18 +98,23 @@ Access token возвращается в JSON. Refresh token возвращае�
 Set-Cookie: refresh_token=...; Path=/auth; HttpOnly; SameSite=Lax
 ```
 
+Важно: logout отзывает refresh token, но уже выданный access token остаётся валидным до истечения срока жизни.
+
 ### calendar-service
 
 Отвечает за календари и соревнования.
 
-Основные части:
+Основные классы:
 
-- `CalendarService` — CRUD календарей и проверка владельца;
-- `EventService` — CRUD событий, фильтрация, пагинация, сортировка;
-- `CalendarExportService` — подготовка данных для экспорта;
-- `CalendarMetadataService` — справочники enum для frontend;
-- `CalendarSpecifications` / `EventSpecifications` — динамические JPA-фильтры;
-- `SortParser` — безопасный разбор query-параметра `sort`.
+| Class | Responsibility |
+| --- | --- |
+| `CalendarService` | CRUD календарей и проверка владельца |
+| `EventService` | CRUD событий, фильтрация, пагинация, сортировка |
+| `CalendarCopyService` | создание нового календаря из выборки событий |
+| `CalendarExportService` | подготовка данных календаря для экспорта |
+| `CalendarMetadataService` | справочники enum для frontend |
+| `CalendarSpecifications`, `EventSpecifications` | динамические JPA-фильтры |
+| `SortParser` | безопасный разбор параметра `sort` |
 
 ### integration-service
 
@@ -141,50 +155,47 @@ FAILED
 - получает данные календаря из `calendar-service`;
 - получает Google access token из `integration-service`;
 - создаёт Google Spreadsheet;
-- записывает соревнования в Google Sheets;
+- записывает события календаря в Google Sheets;
 - сообщает результат в `export-service`.
 
-## Модель календаря
+## Доменная модель
 
-Календарь:
+### Calendar
 
-- `id`
-- `ownerId`
-- `name`
-- `sportType`
-- `year`
-- `createdAt`
-- `updatedAt`
+| Field | Description |
+| --- | --- |
+| `id` | id календаря |
+| `ownerId` | id пользователя-владельца |
+| `name` | название календаря |
+| `sportType` | вид спорта |
+| `year` | год календаря |
+| `createdAt` | дата создания |
+| `updatedAt` | дата последнего обновления |
 
-Событие:
+### Event
 
-- `id`
-- `calendarId`
-- `title`
-- `startDate`
-- `endDate`
-- `competitionLevel`
-- `competitionLevelTitle`
-- `location`
-- `externalUrl`
-- `disciplines`
-- `priority`
-- `priorityTitle`
-- `createdAt`
-- `updatedAt`
+| Field | Description |
+| --- | --- |
+| `id` | id события |
+| `calendarId` | id календаря |
+| `title` | название соревнования |
+| `startDate` | дата начала |
+| `endDate` | дата окончания |
+| `competitionLevel` | enum-код уровня соревнования |
+| `competitionLevelTitle` | русское название уровня |
+| `location` | место проведения |
+| `externalUrl` | ссылка на сайт/регистрацию |
+| `disciplines` | список дисциплин |
+| `priority` | enum-код приоритета |
+| `priorityTitle` | русское название приоритета |
+| `createdAt` | дата создания |
+| `updatedAt` | дата последнего обновления |
 
-Однодневное соревнование хранится как:
+Однодневное соревнование хранится так:
 
 ```text
 startDate = 2027-05-18
 endDate   = 2027-05-18
-```
-
-Многодневное соревнование:
-
-```text
-startDate = 2027-05-18
-endDate   = 2027-05-20
 ```
 
 Если при создании события `endDate` не передан, backend использует `startDate`.
@@ -214,9 +225,111 @@ endDate   = 2027-05-20
 
 Если `priority` не передан при создании события, используется `OPTIONAL`.
 
+## Локальный запуск
+
+Скопировать переменные окружения:
+
+```bash
+cp .env.example .env
+```
+
+Для запуска без реального Google export можно оставить Google-переменные тестовыми. В этом случае приложение поднимется, но экспорт в Google Sheets работать не будет.
+
+Для рабочего Google export нужно заполнить:
+
+```text
+GOOGLE_OAUTH_CLIENT_ID
+GOOGLE_OAUTH_CLIENT_SECRET
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8080/integrations/google/callback
+INTEGRATION_TOKEN_ENCRYPTION_SECRET
+```
+
+`JWT_SECRET` должен быть не короче 32 ASCII-символов, иначе `auth-service` и `api-gateway` не стартуют.
+
+Запуск:
+
+```bash
+docker compose up --build
+```
+
+Открыть frontend:
+
+```text
+http://localhost:5173
+```
+
+Gateway:
+
+```text
+http://localhost:8080
+```
+
+### Порты
+
+| Service | Internal port | Published port |
+| --- | --- | --- |
+| frontend | `5173` | `5173` |
+| api-gateway | `8080` | `8080` |
+| auth-service | `8081` | - |
+| calendar-service | `8082` | - |
+| export-service | `8083` | - |
+| export-worker-service | `8084` | - |
+| integration-service | `8085` | - |
+| postgres-auth | `5432` | `5433` |
+| postgres-calendar | `5432` | `5434` |
+| postgres-export | `5432` | - |
+| postgres-integration | `5432` | - |
+| kafka | `9092` | - |
+
+## Frontend
+
+Frontend находится в:
+
+```text
+frontend/
+```
+
+Запуск вместе со всем проектом:
+
+```bash
+docker compose up --build
+```
+
+Запуск frontend отдельно при уже поднятом backend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend по умолчанию ходит в gateway:
+
+```text
+http://localhost:8080
+```
+
+Адрес gateway можно изменить через:
+
+```text
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+Так как refresh token хранится в cookie, frontend отправляет запросы с:
+
+```js
+credentials: "include"
+```
+
+Gateway разрешает CORS для origin из переменной:
+
+```text
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+```
+
 ## API
 
-Все публичные запросы выполняются через gateway:
+Все клиентские запросы идут через:
 
 ```text
 http://localhost:8080
@@ -299,7 +412,7 @@ Refresh token берётся из cookie `refresh_token`.
 }
 ```
 
-Также backend выставляет новый `refresh_token` cookie.
+Backend также выставляет новый refresh cookie.
 
 #### Logout
 
@@ -307,17 +420,15 @@ Refresh token берётся из cookie `refresh_token`.
 POST /auth/logout
 ```
 
-Logout отзывает refresh token и очищает cookie.
+Logout отзывает текущий refresh token и очищает cookie.
 
-Важно: уже выданный access token остаётся валидным до истечения срока жизни.
-
-### Calendar metadata
+### Metadata
 
 ```http
 GET /calendars/metadata
 ```
 
-Endpoint публичный. Нужен frontend-у для отображения справочников.
+Endpoint публичный. Нужен frontend-у для отображения русских названий enum.
 
 Ответ:
 
@@ -350,11 +461,13 @@ Content-Type: application/json
 
 ```json
 {
-  "name": "Календарь ориентирования",
-  "sportType": "спортивное ориентирование",
+  "name": "Календарь 2027",
+  "sportType": "лёгкая атлетика",
   "year": 2027
 }
 ```
+
+Ответ: `201 Created` + `CalendarResponse`.
 
 #### List calendars
 
@@ -368,8 +481,8 @@ Query-параметры:
 | Parameter | Example | Description |
 | --- | --- | --- |
 | `year` | `2027` | фильтр по году |
-| `sportType` | `спортивное ориентирование` | точный фильтр по виду спорта без учёта регистра |
-| `search` | `ориент` | поиск по названию календаря и виду спорта |
+| `sportType` | `лёгкая атлетика` | точный фильтр по виду спорта без учёта регистра |
+| `search` | `атлетика` | поиск по названию календаря и виду спорта |
 | `sort` | `updated,desc` | сортировка |
 
 Поддерживаемые sort-поля:
@@ -385,7 +498,7 @@ name
 
 ```http
 GET /calendars?year=2027&sort=updated,desc
-GET /calendars?search=ориент&sort=name,asc
+GET /calendars?search=атлетика&sort=name,asc
 ```
 
 #### Get calendar
@@ -407,8 +520,8 @@ Content-Type: application/json
 
 ```json
 {
-  "name": "Календарь ориентирования 2027",
-  "sportType": "спортивное ориентирование",
+  "name": "Календарь 2027 — основная группа",
+  "sportType": "лёгкая атлетика",
   "year": 2027
 }
 ```
@@ -422,7 +535,39 @@ DELETE /calendars/{calendarId}
 Authorization: Bearer <accessToken>
 ```
 
-Удаление календаря также удаляет его события.
+Удаление календаря также удаляет его события и дисциплины событий.
+
+#### Copy calendar by event filters
+
+```http
+POST /calendars/{calendarId}/copies?from=2027-01-01&to=2027-12-31&competitionLevel=REGIONAL&priority=REQUIRED&search=Москва
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+Body описывает новый календарь:
+
+```json
+{
+  "name": "Региональные обязательные старты 2027",
+  "sportType": "лёгкая атлетика",
+  "year": 2027
+}
+```
+
+Query-параметры определяют, какие события копировать из исходного календаря:
+
+| Parameter | Example | Description |
+| --- | --- | --- |
+| `from` | `2027-01-01` | копировать события, которые пересекаются с периодом начиная с этой даты |
+| `to` | `2027-12-31` | копировать события, которые пересекаются с периодом до этой даты |
+| `competitionLevel` | `REGIONAL` | фильтр по уровню соревнований |
+| `priority` | `REQUIRED` | фильтр по приоритету |
+| `search` | `Москва` | поиск по названию, месту и дисциплинам |
+
+Копирование создаёт новый календарь и независимые копии событий с новыми `id`.
+
+Ответ: `201 Created` + `CalendarResponse` нового календаря.
 
 ### Events
 
@@ -443,8 +588,8 @@ Content-Type: application/json
   "location": "Владимир",
   "externalUrl": "https://example.com/registration",
   "disciplines": [
-    "кросс-классика",
-    "кросс-лонг"
+    "800 м",
+    "1500 м"
   ],
   "priority": "REQUIRED"
 }
@@ -476,7 +621,7 @@ Query-параметры:
 | `to` | `2027-05-31` | показать события, которые пересекаются с периодом до этой даты |
 | `competitionLevel` | `REGIONAL` | фильтр по уровню соревнований |
 | `priority` | `REQUIRED` | фильтр по приоритету |
-| `search` | `кросс` | поиск по названию, месту и дисциплинам |
+| `search` | `Москва` | поиск по названию, месту и дисциплинам |
 | `page` | `0` | номер страницы, начиная с нуля |
 | `size` | `20` | размер страницы, от 1 до 100 |
 | `sort` | `date,asc` | сортировка |
@@ -497,7 +642,7 @@ updated
 ```http
 GET /calendars/{calendarId}/events?page=0&size=20&sort=date,asc
 GET /calendars/{calendarId}/events?from=2027-05-01&to=2027-05-31
-GET /calendars/{calendarId}/events?search=кросс&priority=REQUIRED
+GET /calendars/{calendarId}/events?search=Москва&priority=REQUIRED
 ```
 
 Ответ:
@@ -516,8 +661,8 @@ GET /calendars/{calendarId}/events?search=кросс&priority=REQUIRED
       "location": "Владимир",
       "externalUrl": "https://example.com/registration",
       "disciplines": [
-        "кросс-классика",
-        "кросс-лонг"
+        "800 м",
+        "1500 м"
       ],
       "priority": "REQUIRED",
       "priorityTitle": "обязательный",
@@ -557,7 +702,7 @@ Content-Type: application/json
   "location": "Москва",
   "externalUrl": "https://example.com",
   "disciplines": [
-    "кросс-лонг"
+    "10 км"
   ],
   "priority": "IMPORTANT"
 }
@@ -637,7 +782,7 @@ Content-Type: application/json
 }
 ```
 
-Ответ:
+Ответ: `202 Accepted`
 
 ```json
 {
@@ -701,122 +846,12 @@ Client
   <- status + spreadsheetUrl
 ```
 
-## Локальный запуск через Docker Compose
-
-Скопировать пример переменных окружения:
-
-```bash
-cp .env.example .env
-```
-
-Для запуска без реального Google export можно оставить Google-переменные тестовыми, но export в Google Sheets работать не будет.
-
-Для рабочего Google export нужно заполнить:
+Если нужно экспортировать не весь календарь, а выборку событий:
 
 ```text
-GOOGLE_OAUTH_CLIENT_ID
-GOOGLE_OAUTH_CLIENT_SECRET
-GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8080/integrations/google/callback
-INTEGRATION_TOKEN_ENCRYPTION_SECRET
-```
-
-`JWT_SECRET` в `.env` должен быть не короче 32 ASCII-символов. Иначе `auth-service` и `api-gateway` не стартуют из-за `WeakKeyException`.
-
-Затем:
-
-```bash
-docker compose up --build
-```
-
-Порты:
-
-| Service | Internal port | Published port |
-| --- | --- | --- |
-| frontend | `5173` | `5173` |
-| api-gateway | `8080` | `8080` |
-| auth-service | `8081` | - |
-| calendar-service | `8082` | - |
-| export-service | `8083` | - |
-| export-worker-service | `8084` | - |
-| integration-service | `8085` | - |
-| postgres-auth | `5432` | `5433` |
-| postgres-calendar | `5432` | `5434` |
-| postgres-export | `5432` | - |
-| postgres-integration | `5432` | - |
-| kafka | `9092` | - |
-
-## Frontend app
-
-Frontend находится в директории:
-
-```text
-frontend/
-```
-
-Технологии:
-
-- Vite
-- React
-- TypeScript
-- обычный CSS
-
-Запуск вместе со всем проектом:
-
-```bash
-docker compose up --build
-```
-
-Открыть:
-
-```text
-http://localhost:5173
-```
-
-Запуск frontend локально при уже поднятом backend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend по умолчанию ходит в gateway:
-
-```text
-http://localhost:8080
-```
-
-Адрес gateway можно изменить через:
-
-```text
-VITE_API_BASE_URL=http://localhost:8080
-```
-
-## Frontend/CORS
-
-Gateway разрешает CORS для origin из переменной:
-
-```text
-CORS_ALLOWED_ORIGINS=http://localhost:5173
-```
-
-Это рассчитано на frontend, запущенный локально через Vite.
-
-Так как refresh token хранится в cookie, frontend должен отправлять запросы с credentials:
-
-```js
-fetch("http://localhost:8080/auth/refresh", {
-  method: "POST",
-  credentials: "include"
-});
-```
-
-Для axios:
-
-```js
-axios.post("http://localhost:8080/auth/refresh", null, {
-  withCredentials: true
-});
+1. Отфильтровать события.
+2. Создать новый календарь через POST /calendars/{calendarId}/copies.
+3. Запустить обычный export для нового календаря.
 ```
 
 ## Тесты
@@ -827,16 +862,24 @@ axios.post("http://localhost:8080/auth/refresh", null, {
 mvn test
 ```
 
-Запуск проверки как в CI:
+Проверка как в CI:
 
 ```bash
 mvn -B -U clean verify
 ```
 
-Запуск только calendar-service и зависимых модулей:
+Запуск только одного сервиса и зависимых модулей:
 
 ```bash
 mvn -B -pl modules/calendar-service -am test
+```
+
+Frontend build:
+
+```bash
+cd frontend
+npm install
+npm run build
 ```
 
 ## CI
@@ -857,4 +900,3 @@ CI запускается:
 ```bash
 mvn -B -U clean verify
 ```
-
