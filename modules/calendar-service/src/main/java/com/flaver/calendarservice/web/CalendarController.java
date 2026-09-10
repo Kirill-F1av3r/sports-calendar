@@ -11,6 +11,7 @@ import com.flaver.calendarservice.dto.UpdateEventRequest;
 import com.flaver.calendarservice.entity.Calendar;
 import com.flaver.calendarservice.entity.Event;
 import com.flaver.calendarservice.service.CalendarExportService;
+import com.flaver.calendarservice.service.CalendarCopyService;
 import com.flaver.calendarservice.service.CalendarService;
 import com.flaver.calendarservice.service.EventService;
 import com.flaver.dto.export.CalendarExportData;
@@ -33,6 +34,7 @@ public class CalendarController {
     private final CalendarService calendarService;
     private final EventService eventService;
     private final CalendarExportService calendarExportService;
+    private final CalendarCopyService calendarCopyService;
 
     @PostMapping
     public ResponseEntity<CalendarResponse> createCalendar(@RequestHeader("X-User-Id") String userId,
@@ -79,6 +81,21 @@ public class CalendarController {
         UUID ownerId = UUID.fromString(userId);
         calendarService.deleteCalendar(id, ownerId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/copies")
+    public ResponseEntity<CalendarResponse> copyCalendar(
+            @PathVariable("id") UUID id,
+            @RequestHeader("X-User-Id") String userId,
+            @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(name = "competitionLevel", required = false) String competitionLevel,
+            @RequestParam(name = "priority", required = false) String priority,
+            @RequestParam(name = "search", required = false) String search,
+            @Valid @RequestBody CreateCalendarRequest body) {
+        UUID ownerId = UUID.fromString(userId);
+        Calendar calendar = calendarCopyService.copyCalendar(id, ownerId, body, from, to, competitionLevel, priority, search);
+        return ResponseEntity.status(HttpStatus.CREATED).body(CalendarMapper.toCalendarResponse(calendar));
     }
 
     @GetMapping("/{id}/events")
