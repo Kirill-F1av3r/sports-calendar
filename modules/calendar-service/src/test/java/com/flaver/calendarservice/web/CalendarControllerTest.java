@@ -6,6 +6,7 @@ import com.flaver.calendarservice.dto.CreateCalendarRequest;
 import com.flaver.calendarservice.dto.CreateEventRequest;
 import com.flaver.calendarservice.entity.Calendar;
 import com.flaver.calendarservice.entity.Event;
+import com.flaver.calendarservice.service.CalendarCopyService;
 import com.flaver.calendarservice.service.CalendarExportService;
 import com.flaver.calendarservice.service.CalendarService;
 import com.flaver.calendarservice.service.EventService;
@@ -31,6 +32,7 @@ public class CalendarControllerTest {
     private CalendarService calendarService;
     private EventService eventService;
     private CalendarExportService calendarExportService;
+    private CalendarCopyService calendarCopyService;
     private MockMvc mockMvc;
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
@@ -39,7 +41,13 @@ public class CalendarControllerTest {
         calendarService = mock(CalendarService.class);
         eventService = mock(EventService.class);
         calendarExportService = mock(CalendarExportService.class);
-        CalendarController calendarController = new CalendarController(calendarService, eventService, calendarExportService);
+        calendarCopyService = mock(CalendarCopyService.class);
+        CalendarController calendarController = new CalendarController(
+                calendarService,
+                eventService,
+                calendarExportService,
+                calendarCopyService
+        );
         mockMvc = MockMvcBuilders.standaloneSetup(calendarController).build();
     }
 
@@ -126,5 +134,47 @@ public class CalendarControllerTest {
                         .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(eventId.toString()));
+    }
+
+    @Test
+    void copyCalendar_returns201() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        UUID sourceCalendarId = UUID.randomUUID();
+        UUID copiedCalendarId = UUID.randomUUID();
+
+        Calendar copied = new Calendar();
+        copied.setId(copiedCalendarId);
+        copied.setOwnerId(ownerId);
+        copied.setName("Required starts");
+        copied.setSportType("Running");
+        copied.setYear(2027);
+
+        when(calendarCopyService.copyCalendar(
+                eq(sourceCalendarId),
+                eq(ownerId),
+                any(CreateCalendarRequest.class),
+                eq(LocalDate.parse("2027-01-01")),
+                eq(LocalDate.parse("2027-12-31")),
+                eq("REGIONAL"),
+                eq("REQUIRED"),
+                eq("Moscow")
+        )).thenReturn(copied);
+
+        String body = mapper.writeValueAsString(new CreateCalendarRequest("Required starts", "Running", 2027));
+
+        mockMvc.perform(post("/calendars/" + sourceCalendarId + "/copies")
+                        .header("X-User-Id", ownerId.toString())
+                        .param("from", "2027-01-01")
+                        .param("to", "2027-12-31")
+                        .param("competitionLevel", "REGIONAL")
+                        .param("priority", "REQUIRED")
+                        .param("search", "Moscow")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(copiedCalendarId.toString()))
+                .andExpect(jsonPath("$.name").value("Required starts"))
+                .andExpect(jsonPath("$.sportType").value("Running"))
+                .andExpect(jsonPath("$.year").value(2027));
     }
 }

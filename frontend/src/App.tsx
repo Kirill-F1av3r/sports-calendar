@@ -100,6 +100,7 @@ export default function App() {
             accessToken={accessToken}
             calendarId={view.calendarId}
             onBack={() => setView({ name: "calendars" })}
+            onOpen={(calendarId) => setView({ name: "calendar", calendarId })}
             onUnauthorized={() => setAccessToken(null)}
             onError={setGlobalError}
           />
@@ -384,12 +385,14 @@ function CalendarPage({
   accessToken,
   calendarId,
   onBack,
+  onOpen,
   onUnauthorized,
   onError
 }: {
   accessToken: string;
   calendarId: string;
   onBack: () => void;
+  onOpen: (calendarId: string) => void;
   onUnauthorized: () => void;
   onError: (message: string | null) => void;
 }) {
@@ -409,6 +412,8 @@ function CalendarPage({
   const [form, setForm] = useState<EventFormData>(emptyEventForm);
   const [editing, setEditing] = useState<EventResponse | null>(null);
   const [editForm, setEditForm] = useState<EventFormData>(emptyEventForm);
+  const [copyForm, setCopyForm] = useState<CalendarFormData>(emptyCalendarForm);
+  const [copiedCalendar, setCopiedCalendar] = useState<CalendarResponse | null>(null);
   const [exportJob, setExportJob] = useState<ExportJobResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -437,6 +442,18 @@ function CalendarPage({
     void loadPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, calendarId]);
+
+  useEffect(() => {
+    if (!calendar || copyForm.name) {
+      return;
+    }
+
+    setCopyForm({
+      name: `${calendar.name} — выборка`,
+      sportType: calendar.sportType ?? "",
+      year: calendar.year?.toString() ?? new Date().getFullYear().toString()
+    });
+  }, [calendar, copyForm.name]);
 
   useEffect(() => {
     if (!exportJob || exportJob.status === "SUCCESS" || exportJob.status === "FAILED") {
@@ -488,6 +505,24 @@ function CalendarPage({
       await api.deleteEvent(accessToken, calendarId, event.id);
       setMessage("Событие удалено.");
       await loadPage();
+    } catch (err) {
+      handleError(err, onUnauthorized, onError);
+    }
+  }
+
+  async function copyCalendarFromFilters(event: React.FormEvent) {
+    event.preventDefault();
+    try {
+      const copied = await api.copyCalendar(accessToken, calendarId, copyForm, {
+        from: filters.from,
+        to: filters.to,
+        competitionLevel: filters.competitionLevel,
+        priority: filters.priority,
+        search: filters.search
+      });
+      setCopiedCalendar(copied);
+      setMessage(`Календарь "${copied.name}" создан.`);
+      onError(null);
     } catch (err) {
       handleError(err, onUnauthorized, onError);
     }
@@ -683,6 +718,23 @@ function CalendarPage({
           />
         )}
 
+        <CalendarForm
+          title="Создать календарь из выборки"
+          description="Будут скопированы события, подходящие под значения фильтров выше. Сортировка и текущая страница не учитываются."
+          form={copyForm}
+          setForm={setCopyForm}
+          onSubmit={copyCalendarFromFilters}
+        />
+
+        {copiedCalendar && (
+          <div className="card">
+            <p className="muted">Создан календарь: {copiedCalendar.name}</p>
+            <button className="secondary" onClick={() => onOpen(copiedCalendar.id)}>
+              Открыть созданный календарь
+            </button>
+          </div>
+        )}
+
         <div className="card">
           <h3>Экспорт в Google Sheets</h3>
           <p className="muted">Сначала подключи Google account на странице календарей.</p>
@@ -698,12 +750,14 @@ function CalendarPage({
 
 function CalendarForm({
   title,
+  description,
   form,
   setForm,
   onSubmit,
   onCancel
 }: {
   title: string;
+  description?: string;
   form: CalendarFormData;
   setForm: (form: CalendarFormData) => void;
   onSubmit: (event: React.FormEvent) => void;
@@ -712,6 +766,7 @@ function CalendarForm({
   return (
     <form className="card form" onSubmit={onSubmit}>
       <h3>{title}</h3>
+      {description && <p className="muted">{description}</p>}
       <label>
         Название
         <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />

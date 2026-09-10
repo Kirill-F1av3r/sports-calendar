@@ -2,13 +2,12 @@ package com.flaver.calendarservice.service;
 
 import com.flaver.calendarservice.dto.CreateEventRequest;
 import com.flaver.calendarservice.dto.UpdateEventRequest;
-import com.flaver.calendarservice.entity.CompetitionLevel;
 import com.flaver.calendarservice.entity.Event;
-import com.flaver.calendarservice.entity.EventPriority;
 import com.flaver.calendarservice.exception.NotFoundException;
 import com.flaver.calendarservice.repository.EventRepository;
 import com.flaver.calendarservice.service.sort.SortParser;
 import com.flaver.calendarservice.service.specification.EventSpecifications;
+import com.flaver.calendarservice.service.util.EventEnumParser;
 import lombok.AllArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -56,15 +55,20 @@ public class EventService {
                                   Integer size,
                                   String sort) {
         calendarService.findOwnedOrThrow(calendarId, ownerId);
-        CompetitionLevel parsedCompetitionLevel = parseOptionalCompetitionLevel(competitionLevel);
-        EventPriority parsedPriority = parseOptionalPriority(priority);
         Pageable pageable = PageRequest.of(
                 normalizePage(page),
                 normalizeSize(size),
                 sortParser.parse(sort, "date,asc", EVENT_SORT_FIELDS)
         );
         return eventRepository.findAll(
-                EventSpecifications.withFilters(calendarId, from, to, parsedCompetitionLevel, parsedPriority, search),
+                EventSpecifications.withFilters(
+                        calendarId,
+                        from,
+                        to,
+                        EventEnumParser.parseOptionalCompetitionLevel(competitionLevel),
+                        EventEnumParser.parseOptionalPriority(priority),
+                        search
+                ),
                 pageable
         );
     }
@@ -94,11 +98,11 @@ public class EventService {
         event.setTitle(request.title().trim());
         event.setStartDate(request.startDate());
         event.setEndDate(endDate);
-        event.setCompetitionLevel(parseCompetitionLevel(request.competitionLevel()));
+        event.setCompetitionLevel(EventEnumParser.parseCompetitionLevelOrDefault(request.competitionLevel()));
         event.setLocation(trimToNull(request.location()));
         event.setExternalUrl(trimToNull(request.externalUrl()));
         event.setDisciplines(normalizeDisciplines(request.disciplines()));
-        event.setPriority(parsePriority(request.priority()));
+        event.setPriority(EventEnumParser.parsePriorityOrDefault(request.priority()));
         return eventRepository.save(event);
     }
 
@@ -126,7 +130,7 @@ public class EventService {
             throw new IllegalArgumentException("end before start");
         }
         if (request.competitionLevel() != null) {
-            event.setCompetitionLevel(parseCompetitionLevel(request.competitionLevel()));
+            event.setCompetitionLevel(EventEnumParser.parseCompetitionLevelOrDefault(request.competitionLevel()));
         }
         if (request.location() != null) {
             event.setLocation(trimToNull(request.location()));
@@ -138,7 +142,7 @@ public class EventService {
             event.setDisciplines(normalizeDisciplines(request.disciplines()));
         }
         if (request.priority() != null) {
-            event.setPriority(parsePriority(request.priority()));
+            event.setPriority(EventEnumParser.parsePriorityOrDefault(request.priority()));
         }
 
         return eventRepository.save(event);
@@ -148,46 +152,6 @@ public class EventService {
     public void deleteEvent(UUID calendarId, UUID eventId, UUID ownerId) {
         Event event = findOwnedEventOrThrow(calendarId, eventId, ownerId);
         eventRepository.delete(event);
-    }
-
-    private EventPriority parsePriority(String value) {
-        String normalized = trimToNull(value);
-        if (normalized == null) {
-            return EventPriority.OPTIONAL;
-        }
-        return parseOptionalPriority(normalized);
-    }
-
-    private EventPriority parseOptionalPriority(String value) {
-        String normalized = trimToNull(value);
-        if (normalized == null) {
-            return null;
-        }
-        try {
-            return EventPriority.valueOf(normalized.toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("priority must be REQUIRED, IMPORTANT or OPTIONAL");
-        }
-    }
-
-    private CompetitionLevel parseCompetitionLevel(String value) {
-        String normalized = trimToNull(value);
-        if (normalized == null) {
-            return CompetitionLevel.OTHER;
-        }
-        return parseOptionalCompetitionLevel(normalized);
-    }
-
-    private CompetitionLevel parseOptionalCompetitionLevel(String value) {
-        String normalized = trimToNull(value);
-        if (normalized == null) {
-            return null;
-        }
-        try {
-            return CompetitionLevel.valueOf(normalized.toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("unsupported competition level");
-        }
     }
 
     private List<String> normalizeDisciplines(List<String> disciplines) {
