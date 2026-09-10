@@ -177,6 +177,28 @@ export const api = {
     return request<void>(`/calendars/${calendarId}`, { method: "DELETE" }, accessToken);
   },
 
+  copyCalendar(
+    accessToken: string,
+    calendarId: string,
+    data: CalendarFormData,
+    filters: {
+      from?: string;
+      to?: string;
+      competitionLevel?: string;
+      priority?: string;
+      search?: string;
+    }
+  ) {
+    return request<CalendarResponse>(
+      `/calendars/${calendarId}/copies${query(filters)}`,
+      {
+        method: "POST",
+        body: JSON.stringify(calendarBody(data))
+      },
+      accessToken
+    );
+  },
+
   listEvents(
     accessToken: string,
     calendarId: string,
