@@ -1,3 +1,10 @@
+spring:
+  servlet:
+    multipart:
+      enabled: false
+      max-file-size: ${IMPORT_MAX_FILE_SIZE:15MB}
+      max-request-size: ${IMPORT_MAX_REQUEST_SIZE:16MB}
+
 services:
   auth:
     url: ${AUTH_SERVICE_URL}
@@ -5,6 +12,8 @@ services:
     url: ${CALENDAR_SERVICE_URL}
   export:
     url: ${EXPORT_SERVICE_URL}
+  import:
+    url: ${IMPORT_SERVICE_URL}
   integration:
     url: ${INTEGRATION_SERVICE_URL}
 

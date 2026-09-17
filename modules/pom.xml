@@ -23,6 +23,8 @@
         <module>integration-service</module>
         <module>export-service</module>
         <module>export-worker-service</module>
+        <module>import-service</module>
+        <module>import-worker-service</module>
     </modules>
 
 </project>

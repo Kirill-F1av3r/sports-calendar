@@ -1,0 +1,47 @@
+server:
+  port: ${SERVER_PORT:8087}
+
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${IMPORT_WORKER_GROUP_ID:import-worker-service}
+      max-poll-records: 1
+      properties:
+        max.poll.interval.ms: ${IMPORT_WORKER_MAX_POLL_INTERVAL_MS:14400000}
+
+services:
+  import-service:
+    url: ${IMPORT_SERVICE_URL:http://localhost:8086}
+
+import:
+  processing:
+    table-chunk-row-count: ${IMPORT_TABLE_CHUNK_ROW_COUNT:10}
+    text-chunk-line-count: ${IMPORT_TEXT_CHUNK_LINE_COUNT:80}
+    failed-text-chunk-line-count: ${IMPORT_FAILED_TEXT_CHUNK_LINE_COUNT:20}
+    pdf-min-text-chars: ${IMPORT_PDF_MIN_TEXT_CHARS:40}
+    pdf-image-dpi: ${IMPORT_PDF_IMAGE_DPI:150}
+
+storage:
+  s3:
+    endpoint: ${S3_ENDPOINT:http://localhost:9000}
+    access-key: ${S3_ACCESS_KEY:minioadmin}
+    secret-key: ${S3_SECRET_KEY:minioadmin}
+    bucket: ${S3_IMPORT_BUCKET:imports}
+    secure: ${S3_SECURE:false}
+
+ai:
+  provider: ${IMPORT_AI_PROVIDER:ollama}
+  ollama:
+    base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+    text-model: ${OLLAMA_TEXT_MODEL:qwen2.5:3b}
+    vision-model: ${OLLAMA_VISION_MODEL:qwen2.5vl:3b}
+    keep-alive: ${OLLAMA_KEEP_ALIVE:0}
+    request-timeout-seconds: ${OLLAMA_REQUEST_TIMEOUT_SECONDS:180}
+    num-ctx: ${OLLAMA_NUM_CTX:8192}
+    num-predict: ${OLLAMA_NUM_PREDICT:4096}
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+    model: ${GEMINI_MODEL:gemini-3.6-flash}
+    request-timeout-seconds: ${GEMINI_REQUEST_TIMEOUT_SECONDS:180}
