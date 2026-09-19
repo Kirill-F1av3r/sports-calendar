@@ -104,30 +104,14 @@ public class ImportJobService {
         ImportDraftEvent event = draftEventRepository.findByIdAndJobId(draftEventId, jobId)
                 .orElseThrow(() -> new IllegalArgumentException("draft event not found"));
 
-        if (request.title() != null) {
-            event.setTitle(trimToNull(request.title()));
-        }
-        if (request.startDate() != null) {
-            event.setStartDate(request.startDate());
-        }
-        if (request.endDate() != null) {
-            event.setEndDate(request.endDate());
-        }
-        if (request.competitionLevel() != null) {
-            event.setCompetitionLevel(trimToNull(request.competitionLevel()));
-        }
-        if (request.location() != null) {
-            event.setLocation(trimToNull(request.location()));
-        }
-        if (request.externalUrl() != null) {
-            event.setExternalUrl(trimToNull(request.externalUrl()));
-        }
-        if (request.priority() != null) {
-            event.setPriority(trimToNull(request.priority()));
-        }
-        if (request.disciplines() != null) {
-            event.setDisciplines(normalizeDisciplines(request.disciplines()));
-        }
+        event.setTitle(trimToNull(request.title()));
+        event.setStartDate(request.startDate());
+        event.setEndDate(request.endDate());
+        event.setCompetitionLevel(trimToNull(request.competitionLevel()));
+        event.setLocation(trimToNull(request.location()));
+        event.setExternalUrl(trimToNull(request.externalUrl()));
+        event.setPriority(trimToNull(request.priority()));
+        event.setDisciplines(normalizeDisciplines(request.disciplines()));
 
         draftEventValidator.validate(event);
         return ImportMapper.toDraftEventResponse(draftEventRepository.save(event));

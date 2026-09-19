@@ -1,6 +1,7 @@
 package com.flaver.importservice.entity;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -59,6 +60,7 @@ public class ImportDraftEvent {
     )
     @OrderColumn(name = "position")
     @Column(name = "discipline", nullable = false)
+    @Setter(AccessLevel.NONE)
     private List<String> disciplines = new ArrayList<>();
 
     @OneToMany(mappedBy = "draftEvent", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -81,5 +83,11 @@ public class ImportDraftEvent {
     @PreUpdate
     void preUpdate() {
         updatedAt = Instant.now();
+    }
+
+    public void setDisciplines(List<String> disciplines) {
+        List<String> values = disciplines == null ? List.of() : new ArrayList<>(disciplines);
+        this.disciplines.clear();
+        this.disciplines.addAll(values);
     }
 }
