@@ -8,8 +8,13 @@ import type {
   EventFormData,
   EventResponse,
   ExportJobResponse,
+  ImportJobResponse,
   IntegrationStatusResponse,
-  PageResponse
+  PageResponse,
+  DraftEventsResponse,
+  DraftEventResponse,
+  DraftEventFormData,
+  ApplyImportResponse
 } from "./types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
@@ -32,7 +37,7 @@ async function request<T>(
 ): Promise<T> {
   const headers = new Headers(options.headers);
 
-  if (options.body && !headers.has("Content-Type")) {
+  if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   if (accessToken) {
@@ -97,6 +102,22 @@ function eventBody(data: EventFormData) {
   return {
     title: data.title.trim(),
     startDate: data.startDate,
+    endDate: data.endDate || null,
+    competitionLevel: data.competitionLevel || null,
+    location: data.location.trim(),
+    externalUrl: data.externalUrl.trim(),
+    disciplines: data.disciplines
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+    priority: data.priority || null
+  };
+}
+
+function draftEventBody(data: DraftEventFormData) {
+  return {
+    title: data.title.trim(),
+    startDate: data.startDate || null,
     endDate: data.endDate || null,
     competitionLevel: data.competitionLevel || null,
     location: data.location.trim(),
@@ -279,5 +300,48 @@ export const api = {
 
   getExport(accessToken: string, jobId: string) {
     return request<ExportJobResponse>(`/exports/${jobId}`, undefined, accessToken);
+  },
+
+  createImport(accessToken: string, calendarId: string, file: File) {
+    const body = new FormData();
+    body.append("calendarId", calendarId);
+    body.append("file", file);
+    return request<ImportJobResponse>("/imports", { method: "POST", body }, accessToken);
+  },
+
+  getImport(accessToken: string, jobId: string) {
+    return request<ImportJobResponse>(`/imports/${jobId}`, undefined, accessToken);
+  },
+
+  getImportEvents(accessToken: string, jobId: string) {
+    return request<DraftEventsResponse>(`/imports/${jobId}/events`, undefined, accessToken);
+  },
+
+  updateImportEvent(
+    accessToken: string,
+    jobId: string,
+    draftEventId: string,
+    data: DraftEventFormData
+  ) {
+    return request<DraftEventResponse>(
+      `/imports/${jobId}/events/${draftEventId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(draftEventBody(data))
+      },
+      accessToken
+    );
+  },
+
+  deleteImportEvent(accessToken: string, jobId: string, draftEventId: string) {
+    return request<void>(
+      `/imports/${jobId}/events/${draftEventId}`,
+      { method: "DELETE" },
+      accessToken
+    );
+  },
+
+  applyImport(accessToken: string, jobId: string) {
+    return request<ApplyImportResponse>(`/imports/${jobId}/apply`, { method: "POST" }, accessToken);
   }
 };

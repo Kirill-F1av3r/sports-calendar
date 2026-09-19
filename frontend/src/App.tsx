@@ -4,10 +4,13 @@ import type {
   CalendarFormData,
   CalendarMetadataResponse,
   CalendarResponse,
+  DraftEventFormData,
+  DraftEventResponse,
   EnumOption,
   EventFormData,
   EventResponse,
   ExportJobResponse,
+  ImportJobResponse,
   IntegrationStatusResponse,
   PageResponse
 } from "./types";
@@ -31,7 +34,8 @@ const emptyEventForm: EventFormData = {
 
 type View =
   | { name: "calendars" }
-  | { name: "calendar"; calendarId: string };
+  | { name: "calendar"; calendarId: string }
+  | { name: "import"; calendarId: string; jobId: string };
 
 export default function App() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -101,6 +105,19 @@ export default function App() {
             calendarId={view.calendarId}
             onBack={() => setView({ name: "calendars" })}
             onOpen={(calendarId) => setView({ name: "calendar", calendarId })}
+            onOpenImport={(jobId) =>
+              setView({ name: "import", calendarId: view.calendarId, jobId })
+            }
+            onUnauthorized={() => setAccessToken(null)}
+            onError={setGlobalError}
+          />
+        )}
+        {view.name === "import" && (
+          <ImportPreviewPage
+            accessToken={accessToken}
+            calendarId={view.calendarId}
+            jobId={view.jobId}
+            onBack={() => setView({ name: "calendar", calendarId: view.calendarId })}
             onUnauthorized={() => setAccessToken(null)}
             onError={setGlobalError}
           />
@@ -386,6 +403,7 @@ function CalendarPage({
   calendarId,
   onBack,
   onOpen,
+  onOpenImport,
   onUnauthorized,
   onError
 }: {
@@ -393,6 +411,7 @@ function CalendarPage({
   calendarId: string;
   onBack: () => void;
   onOpen: (calendarId: string) => void;
+  onOpenImport: (jobId: string) => void;
   onUnauthorized: () => void;
   onError: (message: string | null) => void;
 }) {
@@ -415,6 +434,11 @@ function CalendarPage({
   const [copyForm, setCopyForm] = useState<CalendarFormData>(emptyCalendarForm);
   const [copiedCalendar, setCopiedCalendar] = useState<CalendarResponse | null>(null);
   const [exportJob, setExportJob] = useState<ExportJobResponse | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [recentImportJobId, setRecentImportJobId] = useState<string | null>(() =>
+    readRecentImportJob(calendarId)
+  );
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -442,6 +466,10 @@ function CalendarPage({
     void loadPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, calendarId]);
+
+  useEffect(() => {
+    setRecentImportJobId(readRecentImportJob(calendarId));
+  }, [calendarId]);
 
   useEffect(() => {
     if (!calendar || copyForm.name) {
@@ -535,6 +563,31 @@ function CalendarPage({
       setMessage("Экспорт запущен.");
     } catch (err) {
       handleError(err, onUnauthorized, onError);
+    }
+  }
+
+  async function startImport(event: React.FormEvent) {
+    event.preventDefault();
+    if (!importFile) {
+      onError("Выберите файл для импорта.");
+      return;
+    }
+    if (importFile.size > 15 * 1024 * 1024) {
+      onError("Размер файла не должен превышать 15 МБ.");
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const job = await api.createImport(accessToken, calendarId, importFile);
+      rememberImportJob(calendarId, job.jobId);
+      setRecentImportJobId(job.jobId);
+      onError(null);
+      onOpenImport(job.jobId);
+    } catch (err) {
+      handleError(err, onUnauthorized, onError);
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -735,6 +788,35 @@ function CalendarPage({
           </div>
         )}
 
+        <form className="card form" onSubmit={startImport}>
+          <h3>Импорт событий с помощью AI</h3>
+          <p className="muted">
+            Загрузи календарь в формате Excel, CSV, PDF, TXT или изображения. Найденные события сначала
+            попадут в предпросмотр.
+          </p>
+          <p className="ai-warning">
+            Автоматическое распознавание может допускать ошибки — обязательно проверь даты и остальные
+            данные перед добавлением событий.
+          </p>
+          <label>
+            Файл до 15 МБ
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv,.txt,.pdf,.png,.jpg,.jpeg,.webp"
+              onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
+              required
+            />
+          </label>
+          <button className="primary" disabled={importing || !importFile}>
+            {importing ? "Загружаем..." : "Распознать события"}
+          </button>
+          {recentImportJobId && (
+            <button type="button" className="secondary" onClick={() => onOpenImport(recentImportJobId)}>
+              Открыть последний импорт
+            </button>
+          )}
+        </form>
+
         <div className="card">
           <h3>Экспорт в Google Sheets</h3>
           <p className="muted">Сначала подключи Google account на странице календарей.</p>
@@ -745,6 +827,410 @@ function CalendarPage({
         </div>
       </aside>
     </div>
+  );
+}
+
+function ImportPreviewPage({
+  accessToken,
+  calendarId,
+  jobId,
+  onBack,
+  onUnauthorized,
+  onError
+}: {
+  accessToken: string;
+  calendarId: string;
+  jobId: string;
+  onBack: () => void;
+  onUnauthorized: () => void;
+  onError: (message: string | null) => void;
+}) {
+  const [job, setJob] = useState<ImportJobResponse | null>(null);
+  const [draftEvents, setDraftEvents] = useState<DraftEventResponse[]>([]);
+  const [metadata, setMetadata] = useState<CalendarMetadataResponse | null>(null);
+  const [editing, setEditing] = useState<DraftEventResponse | null>(null);
+  const [editForm, setEditForm] = useState<DraftEventFormData>(emptyEventForm);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  function reportError(err: unknown) {
+    if (err instanceof ApiError && err.status === 401) {
+      onUnauthorized();
+      return;
+    }
+    setError(readError(err));
+  }
+
+  async function loadImport(showLoading = false) {
+    if (showLoading) {
+      setLoading(true);
+    }
+    try {
+      const nextJob = await api.getImport(accessToken, jobId);
+      setJob(nextJob);
+      if (nextJob.status === "READY" || nextJob.status === "APPLIED") {
+        const response = await api.getImportEvents(accessToken, jobId);
+        setDraftEvents(response.events);
+      }
+      setError(null);
+      onError(null);
+    } catch (err) {
+      reportError(err);
+    } finally {
+      if (showLoading) {
+        setLoading(false);
+      }
+    }
+  }
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([api.metadata(), api.getImport(accessToken, jobId)])
+      .then(async ([metadataData, jobData]) => {
+        setMetadata(metadataData);
+        setJob(jobData);
+        if (jobData.status === "READY" || jobData.status === "APPLIED") {
+          const response = await api.getImportEvents(accessToken, jobId);
+          setDraftEvents(response.events);
+        }
+        setError(null);
+        onError(null);
+      })
+      .catch(reportError)
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, jobId]);
+
+  useEffect(() => {
+    if (!job || (job.status !== "PENDING" && job.status !== "PROCESSING")) {
+      return;
+    }
+    const timer = window.setInterval(() => void loadImport(), 2500);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, jobId, job?.status]);
+
+  function startEditDraft(draftEvent: DraftEventResponse) {
+    setEditing(draftEvent);
+    setEditForm({
+      title: draftEvent.title ?? "",
+      startDate: draftEvent.startDate ?? "",
+      endDate: draftEvent.endDate ?? "",
+      competitionLevel: draftEvent.competitionLevel ?? "",
+      location: draftEvent.location ?? "",
+      externalUrl: draftEvent.externalUrl ?? "",
+      disciplines: draftEvent.disciplines.join(", "),
+      priority: draftEvent.priority ?? ""
+    });
+    setError(null);
+  }
+
+  async function updateDraft(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editing) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.updateImportEvent(accessToken, jobId, editing.id, editForm);
+      setEditing(null);
+      setMessage(updated.valid ? "Черновик обновлён." : "Черновик сохранён, но в нём остались ошибки.");
+      await loadImport();
+    } catch (err) {
+      reportError(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteDraft(draftEvent: DraftEventResponse) {
+    if (!window.confirm(`Удалить черновик события "${draftEvent.title || "Без названия"}"?`)) {
+      return;
+    }
+    try {
+      await api.deleteImportEvent(accessToken, jobId, draftEvent.id);
+      if (editing?.id === draftEvent.id) {
+        setEditing(null);
+      }
+      setMessage("Черновик удалён.");
+      await loadImport();
+    } catch (err) {
+      reportError(err);
+    }
+  }
+
+  async function applyDrafts() {
+    if (!job || job.validEvents === 0) {
+      return;
+    }
+    const warning = job.invalidEvents > 0
+      ? `В календарь будут добавлены только ${job.validEvents} корректных событий. ${job.invalidEvents} черновиков с ошибками будут пропущены. Продолжить?`
+      : `Добавить ${job.validEvents} событий в календарь?`;
+    if (!window.confirm(warning)) {
+      return;
+    }
+
+    setApplying(true);
+    try {
+      const response = await api.applyImport(accessToken, jobId);
+      setMessage(`В календарь добавлено событий: ${response.createdEvents}.`);
+      setEditing(null);
+      await loadImport();
+    } catch (err) {
+      reportError(err);
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  const competitionLevels = metadata?.competitionLevels ?? [];
+  const priorities = metadata?.priorities ?? [];
+  const editable = job?.status === "READY";
+
+  return (
+    <div className="import-page">
+      <button className="link-button" onClick={onBack}>
+        ← К календарю
+      </button>
+
+      <div className="section-header">
+        <div>
+          <h2>Предпросмотр импорта</h2>
+          <p className="muted">{job?.fileName ?? "Загруженный файл"}</p>
+        </div>
+        <button className="secondary" onClick={() => loadImport(true)} disabled={loading}>
+          Обновить
+        </button>
+      </div>
+
+      {error && <Alert type="error" message={error} />}
+      {message && <Alert type="success" message={message} />}
+
+      {loading && !job ? (
+        <div className="card"><p className="muted">Загрузка импорта...</p></div>
+      ) : job ? (
+        <>
+          <div className="card import-summary">
+            <div>
+              <span className={`status-badge status-${job.status.toLowerCase()}`}>
+                {importStatusTitle(job.status)}
+              </span>
+              <p className="muted import-status-text">{importStatusDescription(job)}</p>
+            </div>
+            <div className="import-stats">
+              <div><strong>{job.totalEvents}</strong><span>найдено</span></div>
+              <div><strong className="ok">{job.validEvents}</strong><span>готово</span></div>
+              <div><strong className="warn">{job.invalidEvents}</strong><span>с ошибками</span></div>
+            </div>
+            {job.status === "READY" && (
+              <button className="primary" onClick={applyDrafts} disabled={applying || job.validEvents === 0}>
+                {applying ? "Добавляем..." : `Добавить в календарь (${job.validEvents})`}
+              </button>
+            )}
+          </div>
+
+          {job.status === "FAILED" && job.errorMessage && <Alert type="error" message={job.errorMessage} />}
+
+          {(job.status === "PENDING" || job.status === "PROCESSING") && (
+            <div className="card processing-card">
+              <div className="spinner" aria-hidden="true" />
+              <div>
+                <strong>Файл обрабатывается</strong>
+                <p className="muted">Страница обновляется автоматически. Можно вернуться к календарю и открыть последний импорт позже.</p>
+              </div>
+            </div>
+          )}
+
+          {(job.status === "READY" || job.status === "APPLIED") && (
+            <div className="import-layout">
+              <section className="content">
+                <div className="card table-card">
+                  {draftEvents.length === 0 ? (
+                    <p className="muted">Модель не нашла событий или все черновики были удалены.</p>
+                  ) : (
+                    <table className="draft-table">
+                      <thead>
+                        <tr>
+                          <th>Дата</th>
+                          <th>Название</th>
+                          <th>Уровень</th>
+                          <th>Дисциплины</th>
+                          <th>Место</th>
+                          <th>Приоритет</th>
+                          <th>Проверка</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {draftEvents.map((draftEvent) => (
+                          <tr
+                            key={draftEvent.id}
+                            className={[
+                              draftEvent.valid ? "" : "invalid-row",
+                              editing?.id === draftEvent.id ? "selected-row" : ""
+                            ].filter(Boolean).join(" ")}
+                          >
+                            <td>{formatDraftDateRange(draftEvent.startDate, draftEvent.endDate)}</td>
+                            <td>
+                              <strong>{draftEvent.title || "Без названия"}</strong>
+                              {draftEvent.externalUrl && (
+                                <div><a href={draftEvent.externalUrl} target="_blank" rel="noreferrer">Открыть ссылку</a></div>
+                              )}
+                              {(draftEvent.sourceReference || draftEvent.rawText) && (
+                                <details className="source-details">
+                                  <summary>Исходные данные</summary>
+                                  {draftEvent.sourceReference && <p>Источник: {draftEvent.sourceReference}</p>}
+                                  {draftEvent.rawText && <p>{draftEvent.rawText}</p>}
+                                </details>
+                              )}
+                            </td>
+                            <td>{enumTitle(competitionLevels, draftEvent.competitionLevel)}</td>
+                            <td>{draftEvent.disciplines.length ? draftEvent.disciplines.join(", ") : "—"}</td>
+                            <td>{draftEvent.location || "—"}</td>
+                            <td>{enumTitle(priorities, draftEvent.priority)}</td>
+                            <td>
+                              {draftEvent.valid ? (
+                                <span className="validation-ok">Готово</span>
+                              ) : (
+                                <ul className="validation-errors">
+                                  {draftEvent.errors.map((draftError, index) => (
+                                    <li key={`${draftError.fieldName}-${index}`}>{draftError.message}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </td>
+                            <td>
+                              <div className="row-actions">
+                                {editable && (
+                                  <>
+                                    <button type="button" onClick={() => startEditDraft(draftEvent)}>Редактировать</button>
+                                    <button type="button" className="danger" onClick={() => deleteDraft(draftEvent)}>Удалить</button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </section>
+
+              <aside className="sidebar">
+                <div className="card">
+                  <h3>{job.status === "APPLIED" ? "Импорт завершён" : "Проверь события"}</h3>
+                  <p className="muted">
+                    {job.status === "APPLIED"
+                      ? "События уже были добавлены в календарь. Черновики доступны только для просмотра."
+                      : "Исправь черновики с ошибками и удали ненужные события. В календарь попадут только отмеченные как готовые."}
+                  </p>
+                </div>
+              </aside>
+            </div>
+          )}
+
+          {editing && editable && (
+            <div
+              className="modal-backdrop"
+              role="presentation"
+              onMouseDown={() => !saving && setEditing(null)}
+            >
+              <div
+                className="modal-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="draft-editor-title"
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                {error && <Alert type="error" message={error} />}
+                <DraftEventForm
+                  form={editForm}
+                  setForm={setEditForm}
+                  onSubmit={updateDraft}
+                  onCancel={() => setEditing(null)}
+                  competitionLevels={competitionLevels}
+                  priorities={priorities}
+                  saving={saving}
+                />
+              </div>
+            </div>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function DraftEventForm({
+  form,
+  setForm,
+  onSubmit,
+  onCancel,
+  competitionLevels,
+  priorities,
+  saving
+}: {
+  form: DraftEventFormData;
+  setForm: (form: DraftEventFormData) => void;
+  onSubmit: (event: React.FormEvent) => void;
+  onCancel: () => void;
+  competitionLevels: EnumOption[];
+  priorities: EnumOption[];
+  saving: boolean;
+}) {
+  return (
+    <form className="card form import-editor" onSubmit={onSubmit}>
+      <h3 id="draft-editor-title">Редактировать черновик</h3>
+      <label>
+        Название
+        <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
+      </label>
+      <div className="two-columns">
+        <label>
+          Начало
+          <input type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} />
+        </label>
+        <label>
+          Окончание
+          <input type="date" value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} />
+        </label>
+      </div>
+      <label>
+        Уровень
+        <select value={form.competitionLevel} onChange={(event) => setForm({ ...form, competitionLevel: event.target.value })}>
+          <option value="">Не указан</option>
+          {competitionLevels.map((option) => <option key={option.code} value={option.code}>{option.title}</option>)}
+        </select>
+      </label>
+      <label>
+        Место
+        <input value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} />
+      </label>
+      <label>
+        Ссылка
+        <input value={form.externalUrl} onChange={(event) => setForm({ ...form, externalUrl: event.target.value })} placeholder="https://example.com" />
+      </label>
+      <label>
+        Дисциплины
+        <input value={form.disciplines} onChange={(event) => setForm({ ...form, disciplines: event.target.value })} placeholder="Через запятую" />
+      </label>
+      <label>
+        Приоритет
+        <select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}>
+          <option value="">Не указан</option>
+          {priorities.map((option) => <option key={option.code} value={option.code}>{option.title}</option>)}
+        </select>
+      </label>
+      <div className="form-actions">
+        <button className="primary" disabled={saving}>{saving ? "Сохраняем..." : "Сохранить"}</button>
+        <button type="button" className="secondary" onClick={onCancel}>Отмена</button>
+      </div>
+    </form>
   );
 }
 
@@ -1040,4 +1526,54 @@ function formatDateTime(value: string) {
     dateStyle: "short",
     timeStyle: "short"
   }).format(new Date(value));
+}
+
+function formatDraftDateRange(startDate: string | null, endDate: string | null) {
+  if (!startDate) {
+    return "Дата не распознана";
+  }
+  return formatDateRange(startDate, endDate ?? startDate);
+}
+
+function enumTitle(options: EnumOption[], value: string | null) {
+  if (!value) {
+    return "—";
+  }
+  return options.find((option) => option.code === value)?.title ?? value;
+}
+
+function importStatusTitle(status: ImportJobResponse["status"]) {
+  if (status === "PENDING") return "В очереди";
+  if (status === "PROCESSING") return "Обрабатывается";
+  if (status === "READY") return "Готов к проверке";
+  if (status === "APPLIED") return "Добавлен в календарь";
+  return "Ошибка";
+}
+
+function importStatusDescription(job: ImportJobResponse) {
+  if (job.status === "PENDING") return "Задание создано и ожидает свободный worker.";
+  if (job.status === "PROCESSING") return "Файл читается, а модель извлекает из него события.";
+  if (job.status === "READY") return "Проверь черновики, исправь ошибки и подтверди добавление.";
+  if (job.status === "APPLIED") return "Проверенные события были добавлены в календарь.";
+  return "Обработка не завершилась. Причина указана ниже.";
+}
+
+function recentImportStorageKey(calendarId: string) {
+  return `sports-calendar:last-import:${calendarId}`;
+}
+
+function rememberImportJob(calendarId: string, jobId: string) {
+  try {
+    window.localStorage.setItem(recentImportStorageKey(calendarId), jobId);
+  } catch {
+    // Импорт продолжит работать, даже если браузер запретил localStorage.
+  }
+}
+
+function readRecentImportJob(calendarId: string) {
+  try {
+    return window.localStorage.getItem(recentImportStorageKey(calendarId));
+  } catch {
+    return null;
+  }
 }
