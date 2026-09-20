@@ -73,6 +73,53 @@ export type ExportJobResponse = {
   errorMessage: string | null;
 };
 
+export type ImportJobStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "READY"
+  | "APPLIED"
+  | "FAILED";
+
+export type ImportJobResponse = {
+  jobId: string;
+  calendarId: string;
+  fileName: string;
+  status: ImportJobStatus;
+  totalEvents: number;
+  validEvents: number;
+  invalidEvents: number;
+  errorMessage: string | null;
+};
+
+export type DraftEventError = {
+  fieldName: string;
+  message: string;
+};
+
+export type DraftEventResponse = {
+  id: string;
+  title: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  competitionLevel: string | null;
+  location: string | null;
+  externalUrl: string | null;
+  disciplines: string[];
+  priority: string | null;
+  valid: boolean;
+  sourceReference: string | null;
+  rawText: string | null;
+  errors: DraftEventError[];
+};
+
+export type DraftEventsResponse = {
+  events: DraftEventResponse[];
+};
+
+export type ApplyImportResponse = {
+  createdEvents: number;
+};
+
 export type CalendarFormData = {
   name: string;
   sportType: string;
@@ -89,3 +136,5 @@ export type EventFormData = {
   disciplines: string;
   priority: string;
 };
+
+export type DraftEventFormData = EventFormData;

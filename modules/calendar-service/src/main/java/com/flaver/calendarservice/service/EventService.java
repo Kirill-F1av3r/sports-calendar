@@ -8,6 +8,7 @@ import com.flaver.calendarservice.repository.EventRepository;
 import com.flaver.calendarservice.service.sort.SortParser;
 import com.flaver.calendarservice.service.specification.EventSpecifications;
 import com.flaver.calendarservice.service.util.EventEnumParser;
+import com.flaver.dto.calendar.BatchCreateEventRequest;
 import lombok.AllArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -107,6 +108,16 @@ public class EventService {
     }
 
     @Transactional
+    public int addEventsBatch(UUID calendarId, UUID ownerId, List<BatchCreateEventRequest> requests) {
+        calendarService.findOwnedOrThrow(calendarId, ownerId);
+
+        List<Event> events = requests.stream()
+                .map(request -> toBatchEvent(calendarId, request))
+                .toList();
+        return eventRepository.saveAll(events).size();
+    }
+
+    @Transactional
     public Event updateEvent(UUID calendarId, UUID eventId, UUID ownerId, UpdateEventRequest request) {
         Event event = findOwnedEventOrThrow(calendarId, eventId, ownerId);
 
@@ -163,6 +174,25 @@ public class EventService {
                 .map(String::trim)
                 .filter(value -> !value.isEmpty())
                 .collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    private Event toBatchEvent(UUID calendarId, BatchCreateEventRequest request) {
+        var endDate = request.endDate() != null ? request.endDate() : request.startDate();
+        if (endDate.isBefore(request.startDate())) {
+            throw new IllegalArgumentException("end before start");
+        }
+
+        Event event = new Event();
+        event.setCalendarId(calendarId);
+        event.setTitle(request.title().trim());
+        event.setStartDate(request.startDate());
+        event.setEndDate(endDate);
+        event.setCompetitionLevel(EventEnumParser.parseOptionalCompetitionLevel(request.competitionLevel()));
+        event.setLocation(trimToNull(request.location()));
+        event.setExternalUrl(trimToNull(request.externalUrl()));
+        event.setDisciplines(normalizeDisciplines(request.disciplines()));
+        event.setPriority(EventEnumParser.parseOptionalPriority(request.priority()));
+        return event;
     }
 
     private int normalizePage(Integer page) {

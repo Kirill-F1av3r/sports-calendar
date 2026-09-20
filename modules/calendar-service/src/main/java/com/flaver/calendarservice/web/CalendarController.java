@@ -14,6 +14,8 @@ import com.flaver.calendarservice.service.CalendarExportService;
 import com.flaver.calendarservice.service.CalendarCopyService;
 import com.flaver.calendarservice.service.CalendarService;
 import com.flaver.calendarservice.service.EventService;
+import com.flaver.dto.calendar.BatchCreateEventsRequest;
+import com.flaver.dto.calendar.BatchCreateEventsResponse;
 import com.flaver.dto.export.CalendarExportData;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
@@ -174,5 +176,14 @@ public class CalendarController {
                                                          @RequestHeader("X-User-Id") String userId) {
         UUID ownerId = UUID.fromString(userId);
         return ResponseEntity.ok(calendarExportService.getExportData(id, ownerId));
+    }
+
+    @PostMapping("/internal/{id}/events/batch")
+    public ResponseEntity<BatchCreateEventsResponse> addEventsBatch(@PathVariable("id") UUID id,
+                                                                    @RequestHeader("X-User-Id") String userId,
+                                                                    @Valid @RequestBody BatchCreateEventsRequest body) {
+        UUID ownerId = UUID.fromString(userId);
+        int createdEvents = eventService.addEventsBatch(id, ownerId, body.events());
+        return ResponseEntity.status(HttpStatus.CREATED).body(new BatchCreateEventsResponse(createdEvents));
     }
 }

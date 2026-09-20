@@ -19,19 +19,22 @@ public class GatewayController {
     private final String calendarServiceUrl;
     private final String exportServiceUrl;
     private final String integrationServiceUrl;
+    private final String importServiceUrl;
 
     public GatewayController(ProxyService proxyService,
                              JwtService jwtService,
                              @Value("${services.auth.url}") String authServiceUrl,
                              @Value("${services.calendar.url}") String calendarServiceUrl,
                              @Value("${services.export.url}") String exportServiceUrl,
-                             @Value("${services.integration.url}") String integrationServiceUrl) {
+                             @Value("${services.integration.url}") String integrationServiceUrl,
+                             @Value("${services.import.url}") String importServiceUrl) {
         this.proxyService = proxyService;
         this.jwtService = jwtService;
         this.authServiceUrl = authServiceUrl;
         this.calendarServiceUrl = calendarServiceUrl;
         this.exportServiceUrl = exportServiceUrl;
         this.integrationServiceUrl = integrationServiceUrl;
+        this.importServiceUrl = importServiceUrl;
     }
 
     @RequestMapping("/auth/**")
@@ -56,6 +59,12 @@ public class GatewayController {
     public ResponseEntity<byte[]> proxyExports(HttpServletRequest request,
                                                @RequestHeader HttpHeaders headers) throws IOException {
         return forwardRequest(request, headers, exportServiceUrl, true);
+    }
+
+    @RequestMapping("/imports/**")
+    public ResponseEntity<byte[]> proxyImports(HttpServletRequest request,
+                                               @RequestHeader HttpHeaders headers) throws IOException {
+        return forwardRequest(request, headers, importServiceUrl, true);
     }
 
     @RequestMapping("/integrations/google/callback")
