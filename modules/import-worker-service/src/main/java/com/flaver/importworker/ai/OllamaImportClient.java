@@ -49,14 +49,22 @@ public class OllamaImportClient implements AiImportClient {
     private final OllamaProperties properties;
 
     public OllamaImportClient(OllamaProperties properties, ObjectMapper objectMapper) {
+        this(properties, objectMapper, createRestClient(properties));
+    }
+
+    OllamaImportClient(OllamaProperties properties, ObjectMapper objectMapper, RestClient restClient) {
+        this.restClient = restClient;
+        this.objectMapper = objectMapper.copy().findAndRegisterModules();
+        this.properties = properties;
+    }
+
+    private static RestClient createRestClient(OllamaProperties properties) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(Math.max(5, properties.requestTimeoutSeconds())))
                 .build();
-        this.restClient = RestClient.builder()
+        return RestClient.builder()
                 .requestFactory(new JdkClientHttpRequestFactory(httpClient))
                 .build();
-        this.objectMapper = objectMapper.copy().findAndRegisterModules();
-        this.properties = properties;
     }
 
     @Override
