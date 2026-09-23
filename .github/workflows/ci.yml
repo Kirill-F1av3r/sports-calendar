@@ -10,10 +10,16 @@ on:
       - main
       - "develop*"
       - "develop/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-test:
+  checks:
+    name: Build and test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,5 +31,58 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Build and run tests
-        run: mvn -B -U clean verify
+      - name: Build and test backend
+        run: mvn -B --no-transfer-progress clean verify
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Validate Docker Compose
+        run: docker compose --env-file .env.example config --quiet
+
+  docker-smoke:
+    name: Docker smoke test
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build and start application
+        run: docker compose --env-file .env.example up -d --build
+
+      - name: Check application endpoints
+        shell: bash
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://localhost:8080/calendars/metadata > /dev/null \
+              && curl --fail --silent --show-error http://localhost:5173 > /dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+
+          echo "Application endpoints did not become ready"
+          exit 1
+
+      - name: Show container logs on failure
+        if: ${{ failure() }}
+        run: |
+          docker compose --env-file .env.example ps
+          docker compose --env-file .env.example logs --no-color --tail=200
+
+      - name: Stop application
+        if: ${{ always() }}
+        run: docker compose --env-file .env.example down --volumes --remove-orphans
