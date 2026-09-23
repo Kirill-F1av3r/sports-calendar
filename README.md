@@ -1,6 +1,8 @@
 # Sports Calendar
 
-Backend project для планирования спортивного календаря соревнований и экспорта календаря в Google Sheets.
+[![CI](https://github.com/Kirill-F1av3r/sports-calendar/actions/workflows/ci.yml/badge.svg)](https://github.com/Kirill-F1av3r/sports-calendar/actions/workflows/ci.yml)
+
+Backend микросервисное приложение для планирования спортивных соревнований, импорта событий из файлов и экспорта календарей в Google Sheets.
 
 Проект позволяет:
 
@@ -9,9 +11,22 @@ Backend project для планирования спортивного кале�
 - добавлять соревнования с датами, уровнем, местом, ссылкой, дисциплинами и приоритетом;
 - просматривать события с фильтрацией, поиском, сортировкой и пагинацией;
 - создавать новый календарь из отфильтрованной выборки событий;
-- подключать Google account через OAuth;
+- импортировать события из таблиц, документов и изображений с помощью Gemini API или локальной Ollama-модели;
+- проверять и редактировать распознанные события перед добавлением в календарь;
+- подключать Google-аккаунт через OAuth;
 - асинхронно экспортировать календарь в Google Sheets;
-- проверять API через простой frontend.
+- работать с календарями, событиями, импортом и экспортом через web-интерфейс.
+
+## Навигация
+
+- [Архитектура](#архитектура)
+- [Сервисы](#сервисы)
+- [Доменная модель](#доменная-модель)
+- [Локальный запуск](#локальный-запуск)
+- [Frontend](#frontend)
+- [API](#api)
+- [Тесты](#тесты)
+- [CI](#ci)
 
 ## Стек
 
@@ -22,6 +37,9 @@ Backend project для планирования спортивного кале�
 - PostgreSQL
 - Flyway
 - Kafka
+- MinIO
+- Gemini API / Ollama
+- Google OAuth 2.0 / Google Sheets API
 - Docker Compose
 - Maven
 - Frontend: Vite, React, TypeScript, CSS
@@ -251,7 +269,7 @@ FAILED
 
 ### import-worker-service
 
-Для `xlsx` и `csv` worker не отправляет весь файл в модель одним большим запросом. Сначала файл превращается в строки таблицы, затем строки делятся на пачки. Каждая пачка обрабатывается моделью отдельно, результаты объединяются, а одинаковые события удаляются по ключу `title + startDate + endDate + location`.
+Для `xlsx`, `xls` и `csv` worker не отправляет весь файл в модель одним большим запросом. Сначала файл превращается в строки таблицы, затем строки делятся на пачки. Каждая пачка обрабатывается моделью отдельно, результаты объединяются, а одинаковые события удаляются по ключу `title + startDate + endDate + location`.
 
 Размер пачки настраивается:
 
@@ -263,7 +281,7 @@ IMPORT_PDF_MIN_TEXT_CHARS=40
 IMPORT_PDF_IMAGE_DPI=150
 ```
 
-Если локальная модель пропускает события, отвечает нестабильно или Ollama пишет `truncated = 1`, можно уменьшить значение до `5`-`8`. Если модель работает уверенно и хочется меньше запросов к Ollama, можно увеличить до `15`-`20`.
+Размер пачки определяет баланс между количеством запросов к AI-провайдеру и объёмом одного запроса. Если модель пропускает события или возвращает невалидный ответ, значение можно уменьшить до `5`-`8`. Если обработка стабильна и хочется сократить количество запросов к Gemini API, значение можно увеличить до `15`-`20`. Для Ollama уменьшение пачки также помогает при ответах с `truncated = 1`.
 
 Если отдельный text chunk вернулся от модели в невалидном формате, worker не валит импорт сразу: он разбивает этот chunk на меньшие части по `IMPORT_FAILED_TEXT_CHUNK_LINE_COUNT` строк и повторяет обработку.
 
@@ -277,20 +295,23 @@ PDF обрабатывается постранично:
 
 - слушает Kafka topic `import.jobs.requested`;
 - скачивает файл из MinIO;
-- извлекает данные из `xlsx`, `csv`, `txt`, текстового `pdf`;
-- для изображений (`png`, `jpg`, `webp`) отправляет файл в vision-модель;
-- отправляет текст/табличное представление в локальную Ollama-модель;
+- извлекает данные из `xlsx`, `xls`, `csv`, `txt` и `pdf`, включая сканы и смешанные документы;
+- отправляет текст, табличное представление или изображения в Gemini API;
 - получает JSON со списком событий;
 - возвращает результат в `import-service` через internal HTTP callback.
 
-По умолчанию используются локальные модели:
+Основной AI-провайдер — Gemini API. Для таблиц и документов worker передаёт модели подготовленный текст, а изображения и отсканированные PDF-страницы отправляет как мультимодальный запрос. Gemini извлекает события и возвращает структурированный JSON, который worker проверяет и преобразует в черновики импорта.
+
+В `.env.example` Gemini уже выбран как провайдер по умолчанию:
 
 ```text
-OLLAMA_TEXT_MODEL=qwen2.5:3b
-OLLAMA_VISION_MODEL=qwen2.5vl:3b
+IMPORT_AI_PROVIDER=gemini
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
-Модели можно заменить через env-переменные без изменения кода.
+Для работы требуется `GEMINI_API_KEY`, но скачивать и запускать модель локально не нужно. Адрес API, модель и таймаут настраиваются через `GEMINI_BASE_URL`, `GEMINI_MODEL` и `GEMINI_REQUEST_TIMEOUT_SECONDS`.
+
+Ollama поддерживается как дополнительный полностью локальный вариант для работы без внешнего AI API. Переключение выполняется через `IMPORT_AI_PROVIDER=ollama`; основной код обработки файлов при этом не меняется.
 
 ## Доменная модель
 
@@ -361,11 +382,25 @@ endDate   = 2027-05-18
 
 ## Локальный запуск
 
+### Требования
+
+- Docker с поддержкой Docker Compose;
+- Java 21 и Maven — только для запуска backend-тестов вне Docker;
+- Node.js 24 и npm — только для отдельного запуска frontend.
+
 Скопировать переменные окружения:
 
 ```bash
 cp .env.example .env
 ```
+
+PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+В `.env.example` для AI-импорта выбран Gemini. Перед первым импортом необходимо заполнить `GEMINI_API_KEY`. Без ключа приложение запустится, но обработка импортированного файла завершится ошибкой.
 
 Для запуска без реального Google export можно оставить Google-переменные тестовыми. В этом случае приложение поднимется, но экспорт в Google Sheets работать не будет.
 
@@ -386,7 +421,29 @@ INTEGRATION_TOKEN_ENCRYPTION_SECRET
 docker compose up --build
 ```
 
-Перед первым импортом через локальную модель нужно скачать модели в контейнер Ollama:
+Настройки Gemini из `.env.example`:
+
+```text
+IMPORT_AI_PROVIDER=gemini
+COMPOSE_PROFILES=
+GEMINI_API_KEY=your-google-ai-studio-api-key
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com
+GEMINI_MODEL=gemini-3.5-flash-lite
+GEMINI_REQUEST_TIMEOUT_SECONDS=180
+```
+
+Ключ можно получить в [Google AI Studio](https://aistudio.google.com/app/apikey).
+
+Для полностью локальной обработки нужно изменить `.env`:
+
+```text
+IMPORT_AI_PROVIDER=ollama
+COMPOSE_PROFILES=ollama
+OLLAMA_TEXT_MODEL=qwen2.5:3b
+OLLAMA_VISION_MODEL=qwen2.5vl:3b
+```
+
+Затем запустить Ollama и скачать модели:
 
 ```bash
 docker compose --profile ollama up -d ollama
@@ -394,31 +451,13 @@ docker compose exec ollama ollama pull qwen2.5:3b
 docker compose exec ollama ollama pull qwen2.5vl:3b
 ```
 
-Если хочешь использовать локальный Ollama-провайдер, включи его явно:
-
-```text
-IMPORT_AI_PROVIDER=ollama
-COMPOSE_PROFILES=ollama
-```
-
-Если локальная модель работает слишком медленно, можно переключить `import-worker-service` на Gemini API:
-
-```text
-IMPORT_AI_PROVIDER=gemini
-COMPOSE_PROFILES=
-GEMINI_API_KEY=your-google-ai-studio-api-key
-GEMINI_BASE_URL=https://generativelanguage.googleapis.com
-GEMINI_MODEL=gemini-3.6-flash
-GEMINI_REQUEST_TIMEOUT_SECONDS=180
-```
-
-Ключ можно получить в Google AI Studio: открыть `https://aistudio.google.com/app/apikey`, войти в Google-аккаунт и создать API key. После изменения `.env` нужно пересобрать worker:
+После смены AI-провайдера или модели нужно пересобрать worker:
 
 ```bash
 docker compose up -d --build import-worker-service
 ```
 
-При `IMPORT_AI_PROVIDER=gemini` скачивать модели в Ollama не нужно. Если Gemini API недоступен из-за сети/VPN, можно вернуть `IMPORT_AI_PROVIDER=ollama`.
+При `IMPORT_AI_PROVIDER=gemini` запускать Ollama и скачивать локальные модели не нужно. Если Gemini API недоступен из текущей сети, можно использовать Ollama.
 
 Если vision-модель окажется слишком тяжёлой для ноутбука, можно временно не использовать импорт изображений или заменить модель через `OLLAMA_VISION_MODEL`.
 
@@ -447,17 +486,21 @@ http://localhost:8080
 | integration-service | `8085` | - |
 | import-service | `8086` | - |
 | import-worker-service | `8087` | - |
-| postgres-auth | `5432` | `5433` |
-| postgres-calendar | `5432` | `5434` |
+| postgres-auth | `5432` | - |
+| postgres-calendar | `5432` | - |
 | postgres-export | `5432` | - |
 | postgres-import | `5432` | - |
 | postgres-integration | `5432` | - |
 | kafka | `9092` | - |
 | minio | `9000` | `9000` |
 | minio-console | `9001` | `9001` |
-| ollama | `11434` | `11434` |
+| ollama (profile `ollama`) | `11434` | `11434` |
+
+PostgreSQL не публикуется на хосте. Backend-сервисы подключаются к своим базам по внутренним адресам Docker Compose network.
 
 ## Frontend
+
+Frontend поддерживает регистрацию и вход, управление календарями и событиями, фильтрацию, импорт с проверкой черновиков, подключение Google и запуск экспорта.
 
 Frontend находится в:
 
@@ -475,7 +518,7 @@ docker compose up --build
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -973,11 +1016,13 @@ file = calendar.xlsx
 }
 ```
 
-Поддерживаемые типы первой версии:
+Поддерживаемые типы файлов:
 
 ```text
-xlsx, xls, csv, txt, pdf with text, png, jpg, jpeg, webp
+xlsx, xls, csv, txt, pdf, png, jpg, jpeg, webp
 ```
+
+PDF может быть текстовым, отсканированным или смешанным.
 
 #### Get import job
 
@@ -1136,7 +1181,7 @@ mvn test
 Проверка как в CI:
 
 ```bash
-mvn -B -U clean verify
+mvn -B --no-transfer-progress clean verify
 ```
 
 Запуск только одного сервиса и зависимых модулей:
@@ -1149,7 +1194,7 @@ Frontend build:
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run build
 ```
 
@@ -1164,10 +1209,18 @@ GitHub Actions workflow находится в:
 CI запускается:
 
 - при `push` в ветки `develop*` и `develop/**`;
-- при `pull_request` в `main`, `develop*`, `develop/**`.
+- при `pull_request` в `main`, `develop*`, `develop/**`;
+- вручную через `workflow_dispatch`.
 
-Команда CI:
+Job `checks`:
 
-```bash
-mvn -B -U clean verify
-```
+- собирает backend и запускает тесты командой `mvn -B --no-transfer-progress clean verify`;
+- устанавливает frontend-зависимости через `npm ci` и выполняет `npm run build`;
+- проверяет корректность `docker-compose.yml` командой `docker compose --env-file .env.example config --quiet`.
+
+Для каждого pull request в `main` после успешного `checks` дополнительно запускается `docker-smoke`:
+
+- собирает Docker images и поднимает приложение через Docker Compose;
+- до 150 секунд ожидает доступности API Gateway и frontend;
+- при ошибке выводит состояние и последние логи контейнеров;
+- всегда останавливает контейнеры и удаляет созданные volumes.
