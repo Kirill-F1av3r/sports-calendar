@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flaver.dto.importing.ImportRequestedEvent;
 import com.flaver.importworker.config.GeminiProperties;
 import com.flaver.importworker.dto.CompleteImportRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -48,6 +49,7 @@ public class GeminiImportClient implements AiImportClient {
     private final ObjectMapper objectMapper;
     private final GeminiProperties properties;
 
+    @Autowired
     public GeminiImportClient(GeminiProperties properties, ObjectMapper objectMapper) {
         this(properties, objectMapper, createRestClient(properties));
     }

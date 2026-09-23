@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flaver.dto.importing.ImportRequestedEvent;
 import com.flaver.importworker.config.OllamaProperties;
 import com.flaver.importworker.dto.CompleteImportRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -48,6 +49,7 @@ public class OllamaImportClient implements AiImportClient {
     private final ObjectMapper objectMapper;
     private final OllamaProperties properties;
 
+    @Autowired
     public OllamaImportClient(OllamaProperties properties, ObjectMapper objectMapper) {
         this(properties, objectMapper, createRestClient(properties));
     }
