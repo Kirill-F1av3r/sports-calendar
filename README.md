@@ -1,6 +1,8 @@
 # Sports Calendar
 
-Backend project для планирования спортивного календаря соревнований и экспорта календаря в Google Sheets.
+[![CI](https://github.com/Kirill-F1av3r/sports-calendar/actions/workflows/ci.yml/badge.svg)](https://github.com/Kirill-F1av3r/sports-calendar/actions/workflows/ci.yml)
+
+Backend микросервисное приложение для планирования спортивных соревнований, импорта событий из файлов и экспорта календарей в Google Sheets.
 
 Проект позволяет:
 
@@ -9,9 +11,22 @@ Backend project для планирования спортивного кале�
 - добавлять соревнования с датами, уровнем, местом, ссылкой, дисциплинами и приоритетом;
 - просматривать события с фильтрацией, поиском, сортировкой и пагинацией;
 - создавать новый календарь из отфильтрованной выборки событий;
-- подключать Google account через OAuth;
+- импортировать события из таблиц, документов и изображений с помощью Gemini API или локальной Ollama-модели;
+- проверять и редактировать распознанные события перед добавлением в календарь;
+- подключать Google-аккаунт через OAuth;
 - асинхронно экспортировать календарь в Google Sheets;
-- проверять API через простой frontend.
+- работать с календарями, событиями, импортом и экспортом через web-интерфейс.
+
+## Навигация
+
+- [Архитектура](#архитектура)
+- [Сервисы](#сервисы)
+- [Доменная модель](#доменная-модель)
+- [Локальный запуск](#локальный-запуск)
+- [Frontend](#frontend)
+- [API](#api)
+- [Тесты](#тесты)
+- [CI](#ci)
 
 ## Стек
 
@@ -22,28 +37,96 @@ Backend project для планирования спортивного кале�
 - PostgreSQL
 - Flyway
 - Kafka
+- MinIO
+- Gemini API / Ollama
+- Google OAuth 2.0 / Google Sheets API
 - Docker Compose
 - Maven
 - Frontend: Vite, React, TypeScript, CSS
 
 ## Архитектура
 
-```text
-Frontend / Postman
-        |
-        v
-API Gateway :8080
-        |
-        +--> Auth Service
-        +--> Calendar Service
-        +--> Export Service
-        +--> Integration Service
+```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 70, "rankSpacing": 100, "curve": "basis"}}}%%
+flowchart TB
+    subgraph Client[Клиент]
+        direction TB
+        User([Пользователь]) --> Frontend[Frontend<br/>React + Vite]
+    end
 
-Kafka
-        |
-        v
-Export Worker Service
+    Frontend -->|HTTP / REST| Gateway[API Gateway<br/>JWT validation + routing]
+
+    subgraph Backend[Синхронные микросервисы]
+        direction LR
+
+        subgraph AuthDomain[Auth domain]
+            direction LR
+            Auth[auth-service] --> AuthDb[(postgres-auth<br/>auth_db)]
+        end
+
+        subgraph ExportDomain[Export domain]
+            direction LR
+            Export[export-service] --> ExportDb[(postgres-export<br/>export_db)]
+        end
+
+        subgraph CalendarDomain[Calendar domain]
+            direction LR
+            Calendar[calendar-service] --> CalendarDb[(postgres-calendar<br/>calendar_db)]
+        end
+
+        subgraph ImportDomain[Import domain]
+            direction LR
+            Import[import-service] --> ImportDb[(postgres-import<br/>import_db)]
+        end
+
+        subgraph IntegrationDomain[Integration domain]
+            direction LR
+            Integration[integration-service] --> IntegrationDb[(postgres-integration<br/>integration_db)]
+        end
+    end
+
+    Gateway -->|/auth| Auth
+    Gateway -->|/calendars| Calendar
+    Gateway -->|/exports| Export
+    Gateway -->|/imports| Import
+    Gateway -->|/integrations| Integration
+
+    Export -->|HTTP: проверка доступа| Calendar
+    Import -->|HTTP: доступ и создание событий| Calendar
+
+    subgraph Processing[Асинхронная обработка]
+        direction LR
+        ExportWorker[export-worker-service]
+        Kafka[(Apache Kafka)]
+        ImportWorker[import-worker-service]
+        MinIO[(MinIO<br/>исходные файлы импорта)]
+    end
+
+    Export -.->|publish: export.jobs.requested| Kafka
+    Kafka -.->|consume: export.jobs.requested| ExportWorker
+    ExportWorker -->|HTTP: статус и результат| Export
+    ExportWorker -->|HTTP: данные календаря| Calendar
+    ExportWorker -->|HTTP: Google access token| Integration
+
+    Import -.->|publish: import.jobs.requested| Kafka
+    Kafka -.->|consume: import.jobs.requested| ImportWorker
+    Import -->|S3 API: загрузка файла| MinIO
+    ImportWorker -->|S3 API: чтение файла| MinIO
+    ImportWorker -->|HTTP: статус и черновики| Import
+
+    subgraph External[Внешние API]
+        direction LR
+        GoogleSheets[Google Sheets API]
+        Gemini[Gemini API]
+        GoogleOAuth[Google OAuth / Token API]
+    end
+
+    Integration <-->|HTTPS: OAuth code и tokens| GoogleOAuth
+    ExportWorker -->|HTTPS: создать и заполнить spreadsheet| GoogleSheets
+    ImportWorker -->|HTTPS: извлечь события из файла| Gemini
 ```
+
+Сплошные стрелки показывают синхронные HTTP/S3-вызовы и доступ к данным, пунктирные — публикацию асинхронных задач в Kafka. Каждый stateful-сервис владеет собственной PostgreSQL БД. Во время подключения Google frontend получает `redirectUrl` через `api-gateway` и перенаправляет браузер пользователя на consent screen; callback возвращается браузером через `api-gateway` в `integration-service`.
 
 Снаружи публикуются:
 
@@ -76,6 +159,7 @@ Export Worker Service
 | `/calendars/metadata` | `calendar-service` | public |
 | `/calendars/**` | `calendar-service` | Bearer JWT |
 | `/exports/**` | `export-service` | Bearer JWT |
+| `/imports/**` | `import-service` | Bearer JWT |
 | `/integrations/google/callback` | `integration-service` | public |
 | `/integrations/**` | `integration-service` | Bearer JWT |
 
@@ -158,6 +242,77 @@ FAILED
 - записывает события календаря в Google Sheets;
 - сообщает результат в `export-service`.
 
+### import-service
+
+Отвечает за импорт событий из файлов:
+
+- принимает файл от frontend через `POST /imports`;
+- проверяет доступ пользователя к календарю;
+- сохраняет оригинальный файл в MinIO;
+- создаёт import job;
+- публикует событие в Kafka topic `import.jobs.requested`;
+- хранит черновики найденных событий;
+- позволяет посмотреть, отредактировать или удалить черновые события;
+- применяет импорт, создавая настоящие события в `calendar-service`.
+
+Файл не сохраняется в БД. В БД хранится только `objectKey` файла в MinIO.
+
+Статусы:
+
+```text
+PENDING
+PROCESSING
+READY
+APPLIED
+FAILED
+```
+
+### import-worker-service
+
+Для `xlsx`, `xls` и `csv` worker не отправляет весь файл в модель одним большим запросом. Сначала файл превращается в строки таблицы, затем строки делятся на пачки. Каждая пачка обрабатывается моделью отдельно, результаты объединяются, а одинаковые события удаляются по ключу `title + startDate + endDate + location`.
+
+Размер пачки настраивается:
+
+```text
+IMPORT_TABLE_CHUNK_ROW_COUNT=10
+IMPORT_TEXT_CHUNK_LINE_COUNT=80
+IMPORT_FAILED_TEXT_CHUNK_LINE_COUNT=20
+IMPORT_PDF_MIN_TEXT_CHARS=40
+IMPORT_PDF_IMAGE_DPI=150
+```
+
+Размер пачки определяет баланс между количеством запросов к AI-провайдеру и объёмом одного запроса. Если модель пропускает события или возвращает невалидный ответ, значение можно уменьшить до `5`-`8`. Если обработка стабильна и хочется сократить количество запросов к Gemini API, значение можно увеличить до `15`-`20`. Для Ollama уменьшение пачки также помогает при ответах с `truncated = 1`.
+
+Если отдельный text chunk вернулся от модели в невалидном формате, worker не валит импорт сразу: он разбивает этот chunk на меньшие части по `IMPORT_FAILED_TEXT_CHUNK_LINE_COUNT` строк и повторяет обработку.
+
+PDF обрабатывается постранично:
+
+- если на странице есть достаточно извлекаемого текста, вся страница обрабатывается как один text chunk;
+- если текста почти нет, страница считается сканом/картинкой, рендерится в PNG и отправляется в vision-модель;
+- смешанные PDF тоже поддерживаются: текстовые страницы идут в text-модель, страницы-сканы — в vision-модель.
+
+Фоновый worker для тяжёлой обработки импортов:
+
+- слушает Kafka topic `import.jobs.requested`;
+- скачивает файл из MinIO;
+- извлекает данные из `xlsx`, `xls`, `csv`, `txt` и `pdf`, включая сканы и смешанные документы;
+- отправляет текст, табличное представление или изображения в Gemini API;
+- получает JSON со списком событий;
+- возвращает результат в `import-service` через internal HTTP callback.
+
+Основной AI-провайдер — Gemini API. Для таблиц и документов worker передаёт модели подготовленный текст, а изображения и отсканированные PDF-страницы отправляет как мультимодальный запрос. Gemini извлекает события и возвращает структурированный JSON, который worker проверяет и преобразует в черновики импорта.
+
+В `.env.example` Gemini уже выбран как провайдер по умолчанию:
+
+```text
+IMPORT_AI_PROVIDER=gemini
+GEMINI_MODEL=gemini-3.5-flash-lite
+```
+
+Для работы требуется `GEMINI_API_KEY`, но скачивать и запускать модель локально не нужно. Адрес API, модель и таймаут настраиваются через `GEMINI_BASE_URL`, `GEMINI_MODEL` и `GEMINI_REQUEST_TIMEOUT_SECONDS`.
+
+Ollama поддерживается как дополнительный полностью локальный вариант для работы без внешнего AI API. Переключение выполняется через `IMPORT_AI_PROVIDER=ollama`; основной код обработки файлов при этом не меняется.
+
 ## Доменная модель
 
 ### Calendar
@@ -227,11 +382,25 @@ endDate   = 2027-05-18
 
 ## Локальный запуск
 
+### Требования
+
+- Docker с поддержкой Docker Compose;
+- Java 21 и Maven — только для запуска backend-тестов вне Docker;
+- Node.js 24 и npm — только для отдельного запуска frontend.
+
 Скопировать переменные окружения:
 
 ```bash
 cp .env.example .env
 ```
+
+PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+В `.env.example` для AI-импорта выбран Gemini. Перед первым импортом необходимо заполнить `GEMINI_API_KEY`. Без ключа приложение запустится, но обработка импортированного файла завершится ошибкой.
 
 Для запуска без реального Google export можно оставить Google-переменные тестовыми. В этом случае приложение поднимется, но экспорт в Google Sheets работать не будет.
 
@@ -251,6 +420,46 @@ INTEGRATION_TOKEN_ENCRYPTION_SECRET
 ```bash
 docker compose up --build
 ```
+
+Настройки Gemini из `.env.example`:
+
+```text
+IMPORT_AI_PROVIDER=gemini
+COMPOSE_PROFILES=
+GEMINI_API_KEY=your-google-ai-studio-api-key
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com
+GEMINI_MODEL=gemini-3.5-flash-lite
+GEMINI_REQUEST_TIMEOUT_SECONDS=180
+```
+
+Ключ можно получить в [Google AI Studio](https://aistudio.google.com/app/apikey).
+
+Для полностью локальной обработки нужно изменить `.env`:
+
+```text
+IMPORT_AI_PROVIDER=ollama
+COMPOSE_PROFILES=ollama
+OLLAMA_TEXT_MODEL=qwen2.5:3b
+OLLAMA_VISION_MODEL=qwen2.5vl:3b
+```
+
+Затем запустить Ollama и скачать модели:
+
+```bash
+docker compose --profile ollama up -d ollama
+docker compose exec ollama ollama pull qwen2.5:3b
+docker compose exec ollama ollama pull qwen2.5vl:3b
+```
+
+После смены AI-провайдера или модели нужно пересобрать worker:
+
+```bash
+docker compose up -d --build import-worker-service
+```
+
+При `IMPORT_AI_PROVIDER=gemini` запускать Ollama и скачивать локальные модели не нужно. Если Gemini API недоступен из текущей сети, можно использовать Ollama.
+
+Если vision-модель окажется слишком тяжёлой для ноутбука, можно временно не использовать импорт изображений или заменить модель через `OLLAMA_VISION_MODEL`.
 
 Открыть frontend:
 
@@ -275,13 +484,23 @@ http://localhost:8080
 | export-service | `8083` | - |
 | export-worker-service | `8084` | - |
 | integration-service | `8085` | - |
-| postgres-auth | `5432` | `5433` |
-| postgres-calendar | `5432` | `5434` |
+| import-service | `8086` | - |
+| import-worker-service | `8087` | - |
+| postgres-auth | `5432` | - |
+| postgres-calendar | `5432` | - |
 | postgres-export | `5432` | - |
+| postgres-import | `5432` | - |
 | postgres-integration | `5432` | - |
 | kafka | `9092` | - |
+| minio | `9000` | `9000` |
+| minio-console | `9001` | `9001` |
+| ollama (profile `ollama`) | `11434` | `11434` |
+
+PostgreSQL не публикуется на хосте. Backend-сервисы подключаются к своим базам по внутренним адресам Docker Compose network.
 
 ## Frontend
+
+Frontend поддерживает регистрацию и вход, управление календарями и событиями, фильтрацию, импорт с проверкой черновиков, подключение Google и запуск экспорта.
 
 Frontend находится в:
 
@@ -299,7 +518,7 @@ docker compose up --build
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -765,6 +984,103 @@ DELETE /integrations/google
 Authorization: Bearer <accessToken>
 ```
 
+### Import
+
+#### Create import job
+
+```http
+POST /imports
+Authorization: Bearer <accessToken>
+Content-Type: multipart/form-data
+```
+
+Multipart fields:
+
+```text
+calendarId = 00000000-0000-0000-0000-000000000000
+file = calendar.xlsx
+```
+
+Ответ: `202 Accepted`
+
+```json
+{
+  "jobId": "00000000-0000-0000-0000-000000000000",
+  "calendarId": "00000000-0000-0000-0000-000000000000",
+  "fileName": "calendar.xlsx",
+  "status": "PENDING",
+  "totalEvents": 0,
+  "validEvents": 0,
+  "invalidEvents": 0,
+  "errorMessage": null
+}
+```
+
+Поддерживаемые типы файлов:
+
+```text
+xlsx, xls, csv, txt, pdf, png, jpg, jpeg, webp
+```
+
+PDF может быть текстовым, отсканированным или смешанным.
+
+#### Get import job
+
+```http
+GET /imports/{jobId}
+Authorization: Bearer <accessToken>
+```
+
+#### Get draft events
+
+```http
+GET /imports/{jobId}/events
+Authorization: Bearer <accessToken>
+```
+
+#### Update draft event
+
+```http
+PATCH /imports/{jobId}/events/{draftEventId}
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+```json
+{
+  "title": "Первенство области",
+  "startDate": "2026-05-10",
+  "endDate": "2026-05-12",
+  "competitionLevel": "REGIONAL",
+  "location": "Тверь",
+  "externalUrl": null,
+  "disciplines": ["800 м", "1500 м"],
+  "priority": null
+}
+```
+
+#### Delete draft event
+
+```http
+DELETE /imports/{jobId}/events/{draftEventId}
+Authorization: Bearer <accessToken>
+```
+
+#### Apply import
+
+```http
+POST /imports/{jobId}/apply
+Authorization: Bearer <accessToken>
+```
+
+Создаёт настоящие события в `calendar-service` только из валидных черновиков.
+
+```json
+{
+  "createdEvents": 12
+}
+```
+
 ### Export
 
 #### Create export job
@@ -865,7 +1181,7 @@ mvn test
 Проверка как в CI:
 
 ```bash
-mvn -B -U clean verify
+mvn -B --no-transfer-progress clean verify
 ```
 
 Запуск только одного сервиса и зависимых модулей:
@@ -878,7 +1194,7 @@ Frontend build:
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run build
 ```
 
@@ -893,10 +1209,22 @@ GitHub Actions workflow находится в:
 CI запускается:
 
 - при `push` в ветки `develop*` и `develop/**`;
-- при `pull_request` в `main`, `develop*`, `develop/**`.
+- при `pull_request` в `main`, `develop*`, `develop/**`;
+- вручную через `workflow_dispatch`.
 
-Команда CI:
+Job `checks`:
 
-```bash
-mvn -B -U clean verify
-```
+- собирает backend и запускает тесты командой `mvn -B --no-transfer-progress clean verify`;
+- устанавливает frontend-зависимости через `npm ci` и выполняет `npm run build`;
+- проверяет корректность `docker-compose.yml` командой `docker compose --env-file .env.example config --quiet`.
+
+Для каждого pull request в `main` после успешного `checks` дополнительно запускается `docker-smoke`:
+
+- собирает Docker images и поднимает приложение через Docker Compose;
+- до 150 секунд ожидает доступности API Gateway и frontend;
+- при ошибке выводит состояние и последние логи контейнеров;
+- всегда останавливает контейнеры и удаляет созданные volumes.
+
+## Лицензия
+
+Проект распространяется на условиях [MIT License](LICENSE).
