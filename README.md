@@ -1208,7 +1208,7 @@ GitHub Actions workflow находится в:
 
 CI запускается:
 
-- при `push` в ветки `develop*` и `develop/**`;
+- при `push` в `main`, ветки `develop*` и `develop/**`;
 - при `pull_request` в `main`, `develop*`, `develop/**`;
 - вручную через `workflow_dispatch`.
 
