@@ -28,22 +28,87 @@ Backend project для планирования спортивного кале�
 
 ## Архитектура
 
-```text
-Frontend / Postman
-        |
-        v
-API Gateway :8080
-        |
-        +--> Auth Service
-        +--> Calendar Service
-        +--> Export Service
-        +--> Integration Service
+```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 70, "rankSpacing": 100, "curve": "basis"}}}%%
+flowchart TB
+    subgraph Client[Клиент]
+        direction TB
+        User([Пользователь]) --> Frontend[Frontend<br/>React + Vite]
+    end
 
-Kafka
-        |
-        v
-Export Worker Service
+    Frontend -->|HTTP / REST| Gateway[API Gateway<br/>JWT validation + routing]
+
+    subgraph Backend[Синхронные микросервисы]
+        direction LR
+
+        subgraph AuthDomain[Auth domain]
+            direction LR
+            Auth[auth-service] --> AuthDb[(postgres-auth<br/>auth_db)]
+        end
+
+        subgraph ExportDomain[Export domain]
+            direction LR
+            Export[export-service] --> ExportDb[(postgres-export<br/>export_db)]
+        end
+
+        subgraph CalendarDomain[Calendar domain]
+            direction LR
+            Calendar[calendar-service] --> CalendarDb[(postgres-calendar<br/>calendar_db)]
+        end
+
+        subgraph ImportDomain[Import domain]
+            direction LR
+            Import[import-service] --> ImportDb[(postgres-import<br/>import_db)]
+        end
+
+        subgraph IntegrationDomain[Integration domain]
+            direction LR
+            Integration[integration-service] --> IntegrationDb[(postgres-integration<br/>integration_db)]
+        end
+    end
+
+    Gateway -->|/auth| Auth
+    Gateway -->|/calendars| Calendar
+    Gateway -->|/exports| Export
+    Gateway -->|/imports| Import
+    Gateway -->|/integrations| Integration
+
+    Export -->|HTTP: проверка доступа| Calendar
+    Import -->|HTTP: доступ и создание событий| Calendar
+
+    subgraph Processing[Асинхронная обработка]
+        direction LR
+        ExportWorker[export-worker-service]
+        Kafka[(Apache Kafka)]
+        ImportWorker[import-worker-service]
+        MinIO[(MinIO<br/>исходные файлы импорта)]
+    end
+
+    Export -.->|publish: export.jobs.requested| Kafka
+    Kafka -.->|consume: export.jobs.requested| ExportWorker
+    ExportWorker -->|HTTP: статус и результат| Export
+    ExportWorker -->|HTTP: данные календаря| Calendar
+    ExportWorker -->|HTTP: Google access token| Integration
+
+    Import -.->|publish: import.jobs.requested| Kafka
+    Kafka -.->|consume: import.jobs.requested| ImportWorker
+    Import -->|S3 API: загрузка файла| MinIO
+    ImportWorker -->|S3 API: чтение файла| MinIO
+    ImportWorker -->|HTTP: статус и черновики| Import
+
+    subgraph External[Внешние API]
+        direction LR
+        GoogleSheets[Google Sheets API]
+        Gemini[Gemini API]
+        GoogleOAuth[Google OAuth / Token API]
+    end
+
+    Integration <-->|HTTPS: OAuth code и tokens| GoogleOAuth
+    ExportWorker -->|HTTPS: создать и заполнить spreadsheet| GoogleSheets
+    ImportWorker -->|HTTPS: извлечь события из файла| Gemini
 ```
+
+Сплошные стрелки показывают синхронные HTTP/S3-вызовы и доступ к данным, пунктирные — публикацию асинхронных задач в Kafka. Каждый stateful-сервис владеет собственной PostgreSQL БД. Во время подключения Google frontend получает `redirectUrl` через `api-gateway` и перенаправляет браузер пользователя на consent screen; callback возвращается браузером через `api-gateway` в `integration-service`.
 
 Снаружи публикуются:
 
@@ -76,6 +141,7 @@ Export Worker Service
 | `/calendars/metadata` | `calendar-service` | public |
 | `/calendars/**` | `calendar-service` | Bearer JWT |
 | `/exports/**` | `export-service` | Bearer JWT |
+| `/imports/**` | `import-service` | Bearer JWT |
 | `/integrations/google/callback` | `integration-service` | public |
 | `/integrations/**` | `integration-service` | Bearer JWT |
 
@@ -157,6 +223,74 @@ FAILED
 - создаёт Google Spreadsheet;
 - записывает события календаря в Google Sheets;
 - сообщает результат в `export-service`.
+
+### import-service
+
+Отвечает за импорт событий из файлов:
+
+- принимает файл от frontend через `POST /imports`;
+- проверяет доступ пользователя к календарю;
+- сохраняет оригинальный файл в MinIO;
+- создаёт import job;
+- публикует событие в Kafka topic `import.jobs.requested`;
+- хранит черновики найденных событий;
+- позволяет посмотреть, отредактировать или удалить черновые события;
+- применяет импорт, создавая настоящие события в `calendar-service`.
+
+Файл не сохраняется в БД. В БД хранится только `objectKey` файла в MinIO.
+
+Статусы:
+
+```text
+PENDING
+PROCESSING
+READY
+APPLIED
+FAILED
+```
+
+### import-worker-service
+
+Для `xlsx` и `csv` worker не отправляет весь файл в модель одним большим запросом. Сначала файл превращается в строки таблицы, затем строки делятся на пачки. Каждая пачка обрабатывается моделью отдельно, результаты объединяются, а одинаковые события удаляются по ключу `title + startDate + endDate + location`.
+
+Размер пачки настраивается:
+
+```text
+IMPORT_TABLE_CHUNK_ROW_COUNT=10
+IMPORT_TEXT_CHUNK_LINE_COUNT=80
+IMPORT_FAILED_TEXT_CHUNK_LINE_COUNT=20
+IMPORT_PDF_MIN_TEXT_CHARS=40
+IMPORT_PDF_IMAGE_DPI=150
+```
+
+Если локальная модель пропускает события, отвечает нестабильно или Ollama пишет `truncated = 1`, можно уменьшить значение до `5`-`8`. Если модель работает уверенно и хочется меньше запросов к Ollama, можно увеличить до `15`-`20`.
+
+Если отдельный text chunk вернулся от модели в невалидном формате, worker не валит импорт сразу: он разбивает этот chunk на меньшие части по `IMPORT_FAILED_TEXT_CHUNK_LINE_COUNT` строк и повторяет обработку.
+
+PDF обрабатывается постранично:
+
+- если на странице есть достаточно извлекаемого текста, вся страница обрабатывается как один text chunk;
+- если текста почти нет, страница считается сканом/картинкой, рендерится в PNG и отправляется в vision-модель;
+- смешанные PDF тоже поддерживаются: текстовые страницы идут в text-модель, страницы-сканы — в vision-модель.
+
+Фоновый worker для тяжёлой обработки импортов:
+
+- слушает Kafka topic `import.jobs.requested`;
+- скачивает файл из MinIO;
+- извлекает данные из `xlsx`, `csv`, `txt`, текстового `pdf`;
+- для изображений (`png`, `jpg`, `webp`) отправляет файл в vision-модель;
+- отправляет текст/табличное представление в локальную Ollama-модель;
+- получает JSON со списком событий;
+- возвращает результат в `import-service` через internal HTTP callback.
+
+По умолчанию используются локальные модели:
+
+```text
+OLLAMA_TEXT_MODEL=qwen2.5:3b
+OLLAMA_VISION_MODEL=qwen2.5vl:3b
+```
+
+Модели можно заменить через env-переменные без изменения кода.
 
 ## Доменная модель
 
@@ -252,6 +386,42 @@ INTEGRATION_TOKEN_ENCRYPTION_SECRET
 docker compose up --build
 ```
 
+Перед первым импортом через локальную модель нужно скачать модели в контейнер Ollama:
+
+```bash
+docker compose --profile ollama up -d ollama
+docker compose exec ollama ollama pull qwen2.5:3b
+docker compose exec ollama ollama pull qwen2.5vl:3b
+```
+
+Если хочешь использовать локальный Ollama-провайдер, включи его явно:
+
+```text
+IMPORT_AI_PROVIDER=ollama
+COMPOSE_PROFILES=ollama
+```
+
+Если локальная модель работает слишком медленно, можно переключить `import-worker-service` на Gemini API:
+
+```text
+IMPORT_AI_PROVIDER=gemini
+COMPOSE_PROFILES=
+GEMINI_API_KEY=your-google-ai-studio-api-key
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com
+GEMINI_MODEL=gemini-3.6-flash
+GEMINI_REQUEST_TIMEOUT_SECONDS=180
+```
+
+Ключ можно получить в Google AI Studio: открыть `https://aistudio.google.com/app/apikey`, войти в Google-аккаунт и создать API key. После изменения `.env` нужно пересобрать worker:
+
+```bash
+docker compose up -d --build import-worker-service
+```
+
+При `IMPORT_AI_PROVIDER=gemini` скачивать модели в Ollama не нужно. Если Gemini API недоступен из-за сети/VPN, можно вернуть `IMPORT_AI_PROVIDER=ollama`.
+
+Если vision-модель окажется слишком тяжёлой для ноутбука, можно временно не использовать импорт изображений или заменить модель через `OLLAMA_VISION_MODEL`.
+
 Открыть frontend:
 
 ```text
@@ -275,11 +445,17 @@ http://localhost:8080
 | export-service | `8083` | - |
 | export-worker-service | `8084` | - |
 | integration-service | `8085` | - |
+| import-service | `8086` | - |
+| import-worker-service | `8087` | - |
 | postgres-auth | `5432` | `5433` |
 | postgres-calendar | `5432` | `5434` |
 | postgres-export | `5432` | - |
+| postgres-import | `5432` | - |
 | postgres-integration | `5432` | - |
 | kafka | `9092` | - |
+| minio | `9000` | `9000` |
+| minio-console | `9001` | `9001` |
+| ollama | `11434` | `11434` |
 
 ## Frontend
 
@@ -763,6 +939,101 @@ Authorization: Bearer <accessToken>
 ```http
 DELETE /integrations/google
 Authorization: Bearer <accessToken>
+```
+
+### Import
+
+#### Create import job
+
+```http
+POST /imports
+Authorization: Bearer <accessToken>
+Content-Type: multipart/form-data
+```
+
+Multipart fields:
+
+```text
+calendarId = 00000000-0000-0000-0000-000000000000
+file = calendar.xlsx
+```
+
+Ответ: `202 Accepted`
+
+```json
+{
+  "jobId": "00000000-0000-0000-0000-000000000000",
+  "calendarId": "00000000-0000-0000-0000-000000000000",
+  "fileName": "calendar.xlsx",
+  "status": "PENDING",
+  "totalEvents": 0,
+  "validEvents": 0,
+  "invalidEvents": 0,
+  "errorMessage": null
+}
+```
+
+Поддерживаемые типы первой версии:
+
+```text
+xlsx, xls, csv, txt, pdf with text, png, jpg, jpeg, webp
+```
+
+#### Get import job
+
+```http
+GET /imports/{jobId}
+Authorization: Bearer <accessToken>
+```
+
+#### Get draft events
+
+```http
+GET /imports/{jobId}/events
+Authorization: Bearer <accessToken>
+```
+
+#### Update draft event
+
+```http
+PATCH /imports/{jobId}/events/{draftEventId}
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+```json
+{
+  "title": "Первенство области",
+  "startDate": "2026-05-10",
+  "endDate": "2026-05-12",
+  "competitionLevel": "REGIONAL",
+  "location": "Тверь",
+  "externalUrl": null,
+  "disciplines": ["800 м", "1500 м"],
+  "priority": null
+}
+```
+
+#### Delete draft event
+
+```http
+DELETE /imports/{jobId}/events/{draftEventId}
+Authorization: Bearer <accessToken>
+```
+
+#### Apply import
+
+```http
+POST /imports/{jobId}/apply
+Authorization: Bearer <accessToken>
+```
+
+Создаёт настоящие события в `calendar-service` только из валидных черновиков.
+
+```json
+{
+  "createdEvents": 12
+}
 ```
 
 ### Export
