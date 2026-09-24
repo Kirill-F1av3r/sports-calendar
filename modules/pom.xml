@@ -9,7 +9,7 @@
     <parent>
         <groupId>com.flaver</groupId>
         <artifactId>sports-parent</artifactId>
-        <version>0.1.0</version>
+        <version>0.2.0</version>
     </parent>
 
     <artifactId>modules</artifactId>
@@ -20,6 +20,11 @@
         <module>auth-service</module>
         <module>calendar-service</module>
         <module>api-gateway</module>
+        <module>integration-service</module>
+        <module>export-service</module>
+        <module>export-worker-service</module>
+        <module>import-service</module>
+        <module>import-worker-service</module>
     </modules>
 
 </project>

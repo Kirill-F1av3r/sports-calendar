@@ -5,8 +5,6 @@ services:
       POSTGRES_DB: ${POSTGRES_AUTH_DB:?Set POSTGRES_AUTH_DB in .env}
       POSTGRES_USER: ${POSTGRES_AUTH_USER:?Set POSTGRES_AUTH_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_AUTH_PASSWORD:?Set POSTGRES_AUTH_PASSWORD in .env}
-    ports:
-      - "5433:5432"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_AUTH_USER} -d ${POSTGRES_AUTH_DB}" ]
       interval: 10s
@@ -19,13 +17,93 @@ services:
       POSTGRES_DB: ${POSTGRES_CALENDAR_DB:?Set POSTGRES_CALENDAR_DB in .env}
       POSTGRES_USER: ${POSTGRES_CALENDAR_USER:?Set POSTGRES_CALENDAR_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_CALENDAR_PASSWORD:?Set POSTGRES_CALENDAR_PASSWORD in .env}
-    ports:
-      - "5434:5432"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_CALENDAR_USER} -d ${POSTGRES_CALENDAR_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  postgres-export:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_EXPORT_DB:?Set POSTGRES_EXPORT_DB in .env}
+      POSTGRES_USER: ${POSTGRES_EXPORT_USER:?Set POSTGRES_EXPORT_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_EXPORT_PASSWORD:?Set POSTGRES_EXPORT_PASSWORD in .env}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_EXPORT_USER} -d ${POSTGRES_EXPORT_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-import:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_IMPORT_DB:?Set POSTGRES_IMPORT_DB in .env}
+      POSTGRES_USER: ${POSTGRES_IMPORT_USER:?Set POSTGRES_IMPORT_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_IMPORT_PASSWORD:?Set POSTGRES_IMPORT_PASSWORD in .env}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_IMPORT_USER} -d ${POSTGRES_IMPORT_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-integration:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_INTEGRATION_DB:?Set POSTGRES_INTEGRATION_DB in .env}
+      POSTGRES_USER: ${POSTGRES_INTEGRATION_USER:?Set POSTGRES_INTEGRATION_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_INTEGRATION_PASSWORD:?Set POSTGRES_INTEGRATION_PASSWORD in .env}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_INTEGRATION_USER} -d ${POSTGRES_INTEGRATION_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: [ "CMD-SHELL", "mc ready local >/dev/null 2>&1 || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles:
+      - ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
 
   auth-service:
     build:
@@ -38,8 +116,9 @@ services:
       AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       JWT_ACCESS_TOKEN_SECONDS: ${JWT_ACCESS_TOKEN_SECONDS:-900}
-    ports:
-      - "8081:8081"
+      JWT_REFRESH_TOKEN_SECONDS: ${JWT_REFRESH_TOKEN_SECONDS:-2592000}
+      REFRESH_TOKEN_COOKIE_SECURE: ${REFRESH_TOKEN_COOKIE_SECURE:-false}
+      REFRESH_TOKEN_COOKIE_SAME_SITE: ${REFRESH_TOKEN_COOKIE_SAME_SITE:-Lax}
     depends_on:
       postgres-auth:
         condition: service_healthy
@@ -53,8 +132,6 @@ services:
       CALENDAR_DB_URL: ${CALENDAR_DB_URL:?Set CALENDAR_DB_URL in .env}
       CALENDAR_DB_USERNAME: ${CALENDAR_DB_USERNAME:?Set CALENDAR_DB_USERNAME in .env}
       CALENDAR_DB_PASSWORD: ${CALENDAR_DB_PASSWORD:?Set CALENDAR_DB_PASSWORD in .env}
-    ports:
-      - "8082:8082"
     depends_on:
       postgres-calendar:
         condition: service_healthy
@@ -67,10 +144,155 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:8081}
       CALENDAR_SERVICE_URL: ${CALENDAR_SERVICE_URL:-http://calendar-service:8082}
+      EXPORT_SERVICE_URL: ${EXPORT_SERVICE_URL:-http://export-service:8083}
+      IMPORT_SERVICE_URL: ${IMPORT_SERVICE_URL:-http://import-service:8086}
+      INTEGRATION_SERVICE_URL: ${INTEGRATION_SERVICE_URL:-http://integration-service:8085}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       JWT_ACCESS_TOKEN_SECONDS: ${JWT_ACCESS_TOKEN_SECONDS:-900}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
     ports:
       - "8080:8080"
     depends_on:
       - auth-service
       - calendar-service
+      - export-service
+      - import-service
+      - integration-service
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api-gateway
+
+  integration-service:
+    build:
+      context: .
+      dockerfile: modules/integration-service/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      INTEGRATION_DB_URL: ${INTEGRATION_DB_URL:?Set INTEGRATION_DB_URL in .env}
+      INTEGRATION_DB_USERNAME: ${INTEGRATION_DB_USERNAME:?Set INTEGRATION_DB_USERNAME in .env}
+      INTEGRATION_DB_PASSWORD: ${INTEGRATION_DB_PASSWORD:?Set INTEGRATION_DB_PASSWORD in .env}
+      INTEGRATION_TOKEN_ENCRYPTION_SECRET: ${INTEGRATION_TOKEN_ENCRYPTION_SECRET:?Set INTEGRATION_TOKEN_ENCRYPTION_SECRET in .env}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:?Set GOOGLE_OAUTH_CLIENT_ID in .env}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:?Set GOOGLE_OAUTH_CLIENT_SECRET in .env}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:8080/integrations/google/callback}
+      GOOGLE_OAUTH_SCOPES: ${GOOGLE_OAUTH_SCOPES:-https://www.googleapis.com/auth/drive.file}
+    depends_on:
+      postgres-integration:
+        condition: service_healthy
+
+  export-service:
+    build:
+      context: .
+      dockerfile: modules/export-service/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      EXPORT_DB_URL: ${EXPORT_DB_URL:?Set EXPORT_DB_URL in .env}
+      EXPORT_DB_USERNAME: ${EXPORT_DB_USERNAME:?Set EXPORT_DB_USERNAME in .env}
+      EXPORT_DB_PASSWORD: ${EXPORT_DB_PASSWORD:?Set EXPORT_DB_PASSWORD in .env}
+      CALENDAR_SERVICE_URL: ${CALENDAR_SERVICE_URL:-http://calendar-service:8082}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+    depends_on:
+      postgres-export:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      calendar-service:
+        condition: service_started
+
+  export-worker-service:
+    build:
+      context: .
+      dockerfile: modules/export-worker-service/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      CALENDAR_SERVICE_URL: ${CALENDAR_SERVICE_URL:-http://calendar-service:8082}
+      EXPORT_SERVICE_URL: ${EXPORT_SERVICE_URL:-http://export-service:8083}
+      INTEGRATION_SERVICE_URL: ${INTEGRATION_SERVICE_URL:-http://integration-service:8085}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      EXPORT_WORKER_GROUP_ID: ${EXPORT_WORKER_GROUP_ID:-export-worker-service}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      export-service:
+        condition: service_started
+      calendar-service:
+        condition: service_started
+      integration-service:
+        condition: service_started
+
+  import-service:
+    build:
+      context: .
+      dockerfile: modules/import-service/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      IMPORT_DB_URL: ${IMPORT_DB_URL:?Set IMPORT_DB_URL in .env}
+      IMPORT_DB_USERNAME: ${IMPORT_DB_USERNAME:?Set IMPORT_DB_USERNAME in .env}
+      IMPORT_DB_PASSWORD: ${IMPORT_DB_PASSWORD:?Set IMPORT_DB_PASSWORD in .env}
+      CALENDAR_SERVICE_URL: ${CALENDAR_SERVICE_URL:-http://calendar-service:8082}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in .env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}
+      S3_IMPORT_BUCKET: ${S3_IMPORT_BUCKET:-imports}
+      IMPORT_MAX_FILE_SIZE_BYTES: ${IMPORT_MAX_FILE_SIZE_BYTES:-15728640}
+    depends_on:
+      postgres-import:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      calendar-service:
+        condition: service_started
+
+  import-worker-service:
+    build:
+      context: .
+      dockerfile: modules/import-worker-service/Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      IMPORT_SERVICE_URL: ${IMPORT_SERVICE_URL:-http://import-service:8086}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      IMPORT_WORKER_GROUP_ID: ${IMPORT_WORKER_GROUP_ID:-import-worker-service}
+      IMPORT_WORKER_MAX_POLL_INTERVAL_MS: ${IMPORT_WORKER_MAX_POLL_INTERVAL_MS:-14400000}
+      IMPORT_TABLE_CHUNK_ROW_COUNT: ${IMPORT_TABLE_CHUNK_ROW_COUNT:-10}
+      IMPORT_TEXT_CHUNK_LINE_COUNT: ${IMPORT_TEXT_CHUNK_LINE_COUNT:-80}
+      IMPORT_FAILED_TEXT_CHUNK_LINE_COUNT: ${IMPORT_FAILED_TEXT_CHUNK_LINE_COUNT:-20}
+      IMPORT_PDF_MIN_TEXT_CHARS: ${IMPORT_PDF_MIN_TEXT_CHARS:-40}
+      IMPORT_PDF_IMAGE_DPI: ${IMPORT_PDF_IMAGE_DPI:-150}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY in .env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY in .env}
+      S3_IMPORT_BUCKET: ${S3_IMPORT_BUCKET:-imports}
+      IMPORT_AI_PROVIDER: ${IMPORT_AI_PROVIDER:-ollama}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_TEXT_MODEL: ${OLLAMA_TEXT_MODEL:-qwen2.5:3b}
+      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-qwen2.5vl:3b}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-0}
+      OLLAMA_REQUEST_TIMEOUT_SECONDS: ${OLLAMA_REQUEST_TIMEOUT_SECONDS:-180}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-8192}
+      OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-4096}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      GEMINI_REQUEST_TIMEOUT_SECONDS: ${GEMINI_REQUEST_TIMEOUT_SECONDS:-180}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      import-service:
+        condition: service_started
+
+volumes:
+  minio-data:
+  ollama-data:

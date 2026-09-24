@@ -5,6 +5,15 @@ target/
 !.mvn/wrapper/maven-wrapper.jar
 .mvn/wrapper/maven-wrapper.jar
 
+# Frontend / Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
 # wrapper files
 mvnw
 mvnw.cmd

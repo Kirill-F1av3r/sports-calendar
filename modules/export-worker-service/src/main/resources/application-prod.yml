@@ -1,0 +1,16 @@
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: ${EXPORT_WORKER_GROUP_ID:export-worker-service}
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: com.flaver.dto.export
+
+services:
+  calendar:
+    url: ${CALENDAR_SERVICE_URL}
+  export:
+    url: ${EXPORT_SERVICE_URL}
+  integration:
+    url: ${INTEGRATION_SERVICE_URL}

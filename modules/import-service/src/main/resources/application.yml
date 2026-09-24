@@ -1,0 +1,44 @@
+server:
+  port: ${SERVER_PORT:8086}
+
+spring:
+  datasource:
+    url: ${IMPORT_DB_URL:jdbc:postgresql://localhost:5432/sports_import}
+    username: ${IMPORT_DB_USERNAME:postgres}
+    password: ${IMPORT_DB_PASSWORD:1234}
+  jpa:
+    hibernate:
+      ddl-auto: ${IMPORT_JPA_DDL_AUTO:validate}
+    show-sql: ${IMPORT_JPA_SHOW_SQL:false}
+  servlet:
+    multipart:
+      max-file-size: ${IMPORT_MAX_FILE_SIZE:15MB}
+      max-request-size: ${IMPORT_MAX_REQUEST_SIZE:16MB}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+services:
+  calendar:
+    url: ${CALENDAR_SERVICE_URL:http://localhost:8082}
+
+storage:
+  s3:
+    endpoint: ${S3_ENDPOINT:http://localhost:9000}
+    access-key: ${S3_ACCESS_KEY:minioadmin}
+    secret-key: ${S3_SECRET_KEY:minioadmin}
+    bucket: ${S3_IMPORT_BUCKET:imports}
+    secure: ${S3_SECURE:false}
+
+import:
+  files:
+    max-size-bytes: ${IMPORT_MAX_FILE_SIZE_BYTES:15728640}
+    allowed-content-types:
+      - text/plain
+      - text/csv
+      - application/csv
+      - application/vnd.ms-excel
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/pdf
+      - image/png
+      - image/jpeg
+      - image/webp

@@ -17,15 +17,24 @@ public class GatewayController {
     private final JwtService jwtService;
     private final String authServiceUrl;
     private final String calendarServiceUrl;
+    private final String exportServiceUrl;
+    private final String integrationServiceUrl;
+    private final String importServiceUrl;
 
     public GatewayController(ProxyService proxyService,
                              JwtService jwtService,
                              @Value("${services.auth.url}") String authServiceUrl,
-                             @Value("${services.calendar.url}") String calendarServiceUrl) {
+                             @Value("${services.calendar.url}") String calendarServiceUrl,
+                             @Value("${services.export.url}") String exportServiceUrl,
+                             @Value("${services.integration.url}") String integrationServiceUrl,
+                             @Value("${services.import.url}") String importServiceUrl) {
         this.proxyService = proxyService;
         this.jwtService = jwtService;
         this.authServiceUrl = authServiceUrl;
         this.calendarServiceUrl = calendarServiceUrl;
+        this.exportServiceUrl = exportServiceUrl;
+        this.integrationServiceUrl = integrationServiceUrl;
+        this.importServiceUrl = importServiceUrl;
     }
 
     @RequestMapping("/auth/**")
@@ -40,16 +49,51 @@ public class GatewayController {
         return forwardRequest(request, headers, calendarServiceUrl, true);
     }
 
+    @RequestMapping("/calendars/metadata")
+    public ResponseEntity<byte[]> proxyCalendarMetadata(HttpServletRequest request,
+                                                        @RequestHeader HttpHeaders headers) throws IOException {
+        return forwardRequest(request, headers, calendarServiceUrl, false);
+    }
+
+    @RequestMapping("/exports/**")
+    public ResponseEntity<byte[]> proxyExports(HttpServletRequest request,
+                                               @RequestHeader HttpHeaders headers) throws IOException {
+        return forwardRequest(request, headers, exportServiceUrl, true);
+    }
+
+    @RequestMapping("/imports/**")
+    public ResponseEntity<byte[]> proxyImports(HttpServletRequest request,
+                                               @RequestHeader HttpHeaders headers) throws IOException {
+        return forwardRequest(request, headers, importServiceUrl, true);
+    }
+
+    @RequestMapping("/integrations/google/callback")
+    public ResponseEntity<byte[]> proxyGoogleCallback(HttpServletRequest request,
+                                                      @RequestHeader HttpHeaders headers) throws IOException {
+        return forwardRequest(request, headers, integrationServiceUrl, false);
+    }
+
+    @RequestMapping("/integrations/**")
+    public ResponseEntity<byte[]> proxyIntegrations(HttpServletRequest request,
+                                                    @RequestHeader HttpHeaders headers) throws IOException {
+        return forwardRequest(request, headers, integrationServiceUrl, true);
+    }
+
     private ResponseEntity<byte[]> forwardRequest(HttpServletRequest request,
                                                   HttpHeaders headers,
                                                   String serviceUrl,
                                                   boolean requiresJwt) throws IOException {
         HttpMethod method = HttpMethod.valueOf(request.getMethod());
+        if (method == HttpMethod.OPTIONS) {
+            return ResponseEntity.noContent().build();
+        }
+
         String pathAndQuery = request.getRequestURI() +
                 (request.getQueryString() != null ? "?" + request.getQueryString() : "");
 
         HttpHeaders updatedHeaders = new HttpHeaders();
         updatedHeaders.addAll(headers);
+        updatedHeaders.remove("X-User-Id");
 
         if (requiresJwt) {
             String authHeader = headers.getFirst(HttpHeaders.AUTHORIZATION);

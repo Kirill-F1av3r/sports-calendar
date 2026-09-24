@@ -1,10 +1,27 @@
+spring:
+  servlet:
+    multipart:
+      enabled: false
+      max-file-size: ${IMPORT_MAX_FILE_SIZE:15MB}
+      max-request-size: ${IMPORT_MAX_REQUEST_SIZE:16MB}
+
 services:
   auth:
     url: ${AUTH_SERVICE_URL}
   calendar:
     url: ${CALENDAR_SERVICE_URL}
+  export:
+    url: ${EXPORT_SERVICE_URL}
+  import:
+    url: ${IMPORT_SERVICE_URL}
+  integration:
+    url: ${INTEGRATION_SERVICE_URL}
 
 security:
   jwt:
     secret: ${JWT_SECRET}
     accessTokenSeconds: ${JWT_ACCESS_TOKEN_SECONDS:900}
+
+app:
+  cors:
+    allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

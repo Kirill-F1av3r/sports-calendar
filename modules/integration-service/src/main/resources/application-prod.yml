@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: ${INTEGRATION_DB_URL}
+    username: ${INTEGRATION_DB_USERNAME}
+    password: ${INTEGRATION_DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+google:
+  oauth:
+    client-id: ${GOOGLE_OAUTH_CLIENT_ID}
+    client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET}
+    redirect-uri: ${GOOGLE_OAUTH_REDIRECT_URI}
+    authorization-uri: ${GOOGLE_OAUTH_AUTHORIZATION_URI:https://accounts.google.com/o/oauth2/v2/auth}
+    token-uri: ${GOOGLE_OAUTH_TOKEN_URI:https://oauth2.googleapis.com/token}
+    scopes: ${GOOGLE_OAUTH_SCOPES:https://www.googleapis.com/auth/drive.file}
+
+integration:
+  token-encryption-secret: ${INTEGRATION_TOKEN_ENCRYPTION_SECRET}

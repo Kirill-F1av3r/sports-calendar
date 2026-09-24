@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: ${EXPORT_DB_URL}
+    username: ${EXPORT_DB_USERNAME}
+    password: ${EXPORT_DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+services:
+  calendar:
+    url: ${CALENDAR_SERVICE_URL}

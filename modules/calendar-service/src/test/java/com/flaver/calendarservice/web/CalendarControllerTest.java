@@ -6,7 +6,10 @@ import com.flaver.calendarservice.dto.CreateCalendarRequest;
 import com.flaver.calendarservice.dto.CreateEventRequest;
 import com.flaver.calendarservice.entity.Calendar;
 import com.flaver.calendarservice.entity.Event;
+import com.flaver.calendarservice.service.CalendarCopyService;
+import com.flaver.calendarservice.service.CalendarExportService;
 import com.flaver.calendarservice.service.CalendarService;
+import com.flaver.calendarservice.service.EventService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -27,13 +30,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 public class CalendarControllerTest {
     private CalendarService calendarService;
+    private EventService eventService;
+    private CalendarExportService calendarExportService;
+    private CalendarCopyService calendarCopyService;
     private MockMvc mockMvc;
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @BeforeEach
     void setUp() {
         calendarService = mock(CalendarService.class);
-        CalendarController calendarController = new CalendarController(calendarService);
+        eventService = mock(EventService.class);
+        calendarExportService = mock(CalendarExportService.class);
+        calendarCopyService = mock(CalendarCopyService.class);
+        CalendarController calendarController = new CalendarController(
+                calendarService,
+                eventService,
+                calendarExportService,
+                calendarCopyService
+        );
         mockMvc = MockMvcBuilders.standaloneSetup(calendarController).build();
     }
 
@@ -66,7 +80,7 @@ public class CalendarControllerTest {
         calendar.setOwnerId(ownerId);
         calendar.setName("A");
 
-        when(calendarService.findAllByOwnerId(ownerId)).thenReturn(List.of(calendar));
+        when(calendarService.findCalendars(eq(ownerId), any(), any(), any(), any())).thenReturn(List.of(calendar));
 
         mockMvc.perform(get("/calendars")
                         .header("X-User-Id", ownerId.toString()))
@@ -76,7 +90,7 @@ public class CalendarControllerTest {
     }
 
     @Test
-    void get_returnsCalendarAndEvents() throws Exception {
+    void get_returnsCalendarOnly() throws Exception {
         UUID ownerId = UUID.randomUUID();
         UUID calendarId = UUID.randomUUID();
         Calendar calendar = new Calendar();
@@ -84,20 +98,14 @@ public class CalendarControllerTest {
         calendar.setOwnerId(ownerId);
         calendar.setName("C");
 
-        Event event = new Event();
-        event.setId(UUID.randomUUID());
-        event.setCalendarId(calendarId);
-        event.setTitle("E");
-        event.setStartDate(LocalDate.parse("2026-05-01"));
-
         when(calendarService.findOwnedOrThrow(calendarId, ownerId)).thenReturn(calendar);
-        when(calendarService.listEvents(calendarId, ownerId)).thenReturn(List.of(event));
 
         mockMvc.perform(get("/calendars/" + calendarId)
                         .header("X-User-Id", ownerId.toString()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.calendar.id").value(calendarId.toString()))
-                .andExpect(jsonPath("$.events[0].title").value("E"));
+                .andExpect(jsonPath("$.id").value(calendarId.toString()))
+                .andExpect(jsonPath("$.name").value("C"))
+                .andExpect(jsonPath("$.events").doesNotExist());
     }
 
     @Test
@@ -106,10 +114,14 @@ public class CalendarControllerTest {
         UUID calendarId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
 
-        when(calendarService.addEvent(eq(calendarId), eq(ownerId), any(CreateEventRequest.class)))
+        when(eventService.addEvent(eq(calendarId), eq(ownerId), any(CreateEventRequest.class)))
                 .thenAnswer(inv -> {
                     Event ev = new Event();
                     ev.setId(eventId);
+                    ev.setCalendarId(calendarId);
+                    ev.setTitle("Title");
+                    ev.setStartDate(LocalDate.parse("2026-05-01"));
+                    ev.setEndDate(LocalDate.parse("2026-05-02"));
                     return ev;
                 });
 
@@ -122,5 +134,47 @@ public class CalendarControllerTest {
                         .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(eventId.toString()));
+    }
+
+    @Test
+    void copyCalendar_returns201() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        UUID sourceCalendarId = UUID.randomUUID();
+        UUID copiedCalendarId = UUID.randomUUID();
+
+        Calendar copied = new Calendar();
+        copied.setId(copiedCalendarId);
+        copied.setOwnerId(ownerId);
+        copied.setName("Required starts");
+        copied.setSportType("Running");
+        copied.setYear(2027);
+
+        when(calendarCopyService.copyCalendar(
+                eq(sourceCalendarId),
+                eq(ownerId),
+                any(CreateCalendarRequest.class),
+                eq(LocalDate.parse("2027-01-01")),
+                eq(LocalDate.parse("2027-12-31")),
+                eq("REGIONAL"),
+                eq("REQUIRED"),
+                eq("Moscow")
+        )).thenReturn(copied);
+
+        String body = mapper.writeValueAsString(new CreateCalendarRequest("Required starts", "Running", 2027));
+
+        mockMvc.perform(post("/calendars/" + sourceCalendarId + "/copies")
+                        .header("X-User-Id", ownerId.toString())
+                        .param("from", "2027-01-01")
+                        .param("to", "2027-12-31")
+                        .param("competitionLevel", "REGIONAL")
+                        .param("priority", "REQUIRED")
+                        .param("search", "Moscow")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(copiedCalendarId.toString()))
+                .andExpect(jsonPath("$.name").value("Required starts"))
+                .andExpect(jsonPath("$.sportType").value("Running"))
+                .andExpect(jsonPath("$.year").value(2027));
     }
 }

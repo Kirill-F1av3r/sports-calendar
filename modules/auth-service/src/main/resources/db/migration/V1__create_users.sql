@@ -1,0 +1,8 @@
+CREATE TABLE users (
+    id UUID PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255),
+    roles VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE
+);

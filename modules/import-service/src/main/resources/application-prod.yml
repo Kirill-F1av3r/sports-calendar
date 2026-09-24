@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: ${IMPORT_DB_URL}
+    username: ${IMPORT_DB_USERNAME}
+    password: ${IMPORT_DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+
+services:
+  calendar:
+    url: ${CALENDAR_SERVICE_URL}
+
+storage:
+  s3:
+    endpoint: ${S3_ENDPOINT}
+    access-key: ${S3_ACCESS_KEY}
+    secret-key: ${S3_SECRET_KEY}
+    bucket: ${S3_IMPORT_BUCKET:imports}
+    secure: ${S3_SECURE:false}
