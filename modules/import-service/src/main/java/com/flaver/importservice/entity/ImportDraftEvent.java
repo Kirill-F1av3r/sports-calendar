@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -53,7 +54,8 @@ public class ImportDraftEvent {
     @Column(name = "created_event_id")
     private UUID createdEventId;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @BatchSize(size = 100)
     @CollectionTable(
             name = "import_draft_event_disciplines",
             joinColumns = @JoinColumn(name = "draft_event_id")
@@ -64,6 +66,7 @@ public class ImportDraftEvent {
     private List<String> disciplines = new ArrayList<>();
 
     @OneToMany(mappedBy = "draftEvent", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 100)
     @OrderBy("createdAt ASC")
     private List<ImportDraftEventError> errors = new ArrayList<>();
 

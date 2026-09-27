@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.flaver.calendarservice.dto.CreateCalendarRequest;
 import com.flaver.calendarservice.dto.CreateEventRequest;
+import com.flaver.calendarservice.dto.CalendarMapper;
 import com.flaver.calendarservice.entity.Calendar;
 import com.flaver.calendarservice.entity.Event;
 import com.flaver.calendarservice.service.CalendarCopyService;
@@ -122,7 +123,7 @@ public class CalendarControllerTest {
                     ev.setTitle("Title");
                     ev.setStartDate(LocalDate.parse("2026-05-01"));
                     ev.setEndDate(LocalDate.parse("2026-05-02"));
-                    return ev;
+                    return CalendarMapper.toEventResponse(ev);
                 });
 
         String body = mapper.writeValueAsString(new CreateEventRequest("Title", LocalDate.parse("2026-05-01"),

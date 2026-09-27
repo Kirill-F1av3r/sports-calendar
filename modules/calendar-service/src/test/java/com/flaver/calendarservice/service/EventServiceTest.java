@@ -1,8 +1,8 @@
 package com.flaver.calendarservice.service;
 
 import com.flaver.calendarservice.dto.CreateEventRequest;
+import com.flaver.calendarservice.dto.EventResponse;
 import com.flaver.calendarservice.entity.Calendar;
-import com.flaver.calendarservice.entity.CompetitionLevel;
 import com.flaver.calendarservice.entity.Event;
 import com.flaver.calendarservice.repository.CalendarRepository;
 import com.flaver.calendarservice.repository.EventRepository;
@@ -42,45 +42,41 @@ public class EventServiceTest {
         UUID ownerId = UUID.randomUUID();
         UUID calendarId = UUID.randomUUID();
         String title = "Title";
-        String startDate = "2026-05-01";
-        String endDate = "2026-05-02";
-        String location = "Location";
+        LocalDate startDate = LocalDate.of(2026, 5, 1);
+        LocalDate endDate = LocalDate.of(2026, 5, 2);
 
         Calendar calendar = new Calendar();
         calendar.setId(calendarId);
         calendar.setOwnerId(ownerId);
 
         when(calendarRepository.findById(calendarId)).thenReturn(Optional.of(calendar));
-        when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(eventRepository.save(any(Event.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         CreateEventRequest request = new CreateEventRequest(
                 title,
-                LocalDate.parse(startDate),
-                LocalDate.parse(endDate),
+                startDate,
+                endDate,
                 "REGIONAL",
-                location,
+                "Location",
                 "https://example.com",
-                List.of("кросс-классика", "кросс-лонг"),
+                List.of("Sprint", "Relay"),
                 "REQUIRED"
         );
-        Event event = eventService.addEvent(calendarId, ownerId, request);
+        EventResponse event = eventService.addEvent(calendarId, ownerId, request);
 
-        assertThat(event).isNotNull();
-        assertThat(event.getCalendarId()).isEqualTo(calendarId);
-        assertThat(event.getTitle()).isEqualTo(title);
-        assertThat(event.getStartDate()).isEqualTo(LocalDate.parse(startDate));
-        assertThat(event.getEndDate()).isEqualTo(LocalDate.parse(endDate));
-        assertThat(event.getCompetitionLevel()).isEqualTo(CompetitionLevel.REGIONAL);
-        assertThat(event.getLocation()).isEqualTo(location);
-        assertThat(event.getExternalUrl()).isEqualTo("https://example.com");
-        assertThat(event.getDisciplines()).containsExactly("кросс-классика", "кросс-лонг");
-        assertThat(event.getPriority().name()).isEqualTo("REQUIRED");
-        assertThat(event.getCompetitionLevel().getDisplayNameRu()).isEqualTo("региональные");
-        assertThat(event.getPriority().getDisplayNameRu()).isEqualTo("обязательный");
+        assertThat(event.calendarId()).isEqualTo(calendarId);
+        assertThat(event.title()).isEqualTo(title);
+        assertThat(event.startDate()).isEqualTo(startDate);
+        assertThat(event.endDate()).isEqualTo(endDate);
+        assertThat(event.competitionLevel()).isEqualTo("REGIONAL");
+        assertThat(event.location()).isEqualTo("Location");
+        assertThat(event.externalUrl()).isEqualTo("https://example.com");
+        assertThat(event.disciplines()).containsExactly("Sprint", "Relay");
+        assertThat(event.priority()).isEqualTo("REQUIRED");
 
-        ArgumentCaptor<Event> cap = ArgumentCaptor.forClass(Event.class);
-        verify(eventRepository).save(cap.capture());
-        assertThat(cap.getValue().getTitle()).isEqualTo(title);
+        ArgumentCaptor<Event> eventCaptor = ArgumentCaptor.forClass(Event.class);
+        verify(eventRepository).save(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().getTitle()).isEqualTo(title);
     }
 
     @Test

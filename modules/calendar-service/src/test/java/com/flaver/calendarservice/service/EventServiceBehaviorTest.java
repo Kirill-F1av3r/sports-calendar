@@ -1,10 +1,9 @@
 package com.flaver.calendarservice.service;
 
 import com.flaver.calendarservice.dto.CreateEventRequest;
+import com.flaver.calendarservice.dto.EventResponse;
 import com.flaver.calendarservice.dto.UpdateEventRequest;
-import com.flaver.calendarservice.entity.CompetitionLevel;
 import com.flaver.calendarservice.entity.Event;
-import com.flaver.calendarservice.entity.EventPriority;
 import com.flaver.calendarservice.exception.NotFoundException;
 import com.flaver.calendarservice.repository.EventRepository;
 import com.flaver.calendarservice.service.sort.SortParser;
@@ -52,15 +51,15 @@ class EventServiceBehaviorTest {
         CreateEventRequest request = new CreateEventRequest(" Cup ", LocalDate.of(2026, 1, 1), null,
                 null, " ", " https://event ", Arrays.asList(" Sprint ", "", null), null);
 
-        Event result = service.addEvent(calendarId, ownerId, request);
+        EventResponse result = service.addEvent(calendarId, ownerId, request);
 
-        assertThat(result.getTitle()).isEqualTo("Cup");
-        assertThat(result.getEndDate()).isEqualTo(result.getStartDate());
-        assertThat(result.getCompetitionLevel()).isEqualTo(CompetitionLevel.OTHER);
-        assertThat(result.getPriority()).isEqualTo(EventPriority.OPTIONAL);
-        assertThat(result.getLocation()).isNull();
-        assertThat(result.getExternalUrl()).isEqualTo("https://event");
-        assertThat(result.getDisciplines()).containsExactly("Sprint");
+        assertThat(result.title()).isEqualTo("Cup");
+        assertThat(result.endDate()).isEqualTo(result.startDate());
+        assertThat(result.competitionLevel()).isEqualTo("OTHER");
+        assertThat(result.priority()).isEqualTo("OPTIONAL");
+        assertThat(result.location()).isNull();
+        assertThat(result.externalUrl()).isEqualTo("https://event");
+        assertThat(result.disciplines()).containsExactly("Sprint");
     }
 
     @Test
@@ -95,10 +94,10 @@ class EventServiceBehaviorTest {
         event.setCalendarId(UUID.randomUUID());
         when(repository.findById(eventId)).thenReturn(Optional.of(event));
 
-        assertThatThrownBy(() -> service.findOwnedEventOrThrow(calendarId, eventId, ownerId))
+        assertThatThrownBy(() -> service.getEvent(calendarId, eventId, ownerId))
                 .isInstanceOf(NotFoundException.class);
         when(repository.findById(eventId)).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> service.findOwnedEventOrThrow(calendarId, eventId, ownerId))
+        assertThatThrownBy(() -> service.getEvent(calendarId, eventId, ownerId))
                 .isInstanceOf(NotFoundException.class);
     }
 
@@ -112,14 +111,14 @@ class EventServiceBehaviorTest {
                 LocalDate.of(2026, 2, 3), "INTERNATIONAL", " ", " https://new ",
                 Arrays.asList(" Long ", ""), "REQUIRED");
 
-        Event result = service.updateEvent(calendarId, eventId, ownerId, request);
+        EventResponse result = service.updateEvent(calendarId, eventId, ownerId, request);
         service.deleteEvent(calendarId, eventId, ownerId);
 
-        assertThat(result.getTitle()).isEqualTo("New");
-        assertThat(result.getCompetitionLevel()).isEqualTo(CompetitionLevel.INTERNATIONAL);
-        assertThat(result.getPriority()).isEqualTo(EventPriority.REQUIRED);
-        assertThat(result.getLocation()).isNull();
-        assertThat(result.getDisciplines()).containsExactly("Long");
+        assertThat(result.title()).isEqualTo("New");
+        assertThat(result.competitionLevel()).isEqualTo("INTERNATIONAL");
+        assertThat(result.priority()).isEqualTo("REQUIRED");
+        assertThat(result.location()).isNull();
+        assertThat(result.disciplines()).containsExactly("Long");
         verify(repository).delete(event);
     }
 

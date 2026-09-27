@@ -9,7 +9,6 @@ import com.flaver.calendarservice.dto.PageResponse;
 import com.flaver.calendarservice.dto.UpdateCalendarRequest;
 import com.flaver.calendarservice.dto.UpdateEventRequest;
 import com.flaver.calendarservice.entity.Calendar;
-import com.flaver.calendarservice.entity.Event;
 import com.flaver.calendarservice.service.CalendarExportService;
 import com.flaver.calendarservice.service.CalendarCopyService;
 import com.flaver.calendarservice.service.CalendarService;
@@ -114,8 +113,7 @@ public class CalendarController {
             @RequestParam(name = "sort", required = false) String sort) {
         UUID ownerId = UUID.fromString(userId);
         Page<EventResponse> events = eventService.findEvents(id, ownerId, from, to, competitionLevel, priority,
-                        search, page, size, sort)
-                .map(CalendarMapper::toEventResponse);
+                search, page, size, sort);
         return ResponseEntity.ok(new PageResponse<>(
                 events.getContent(),
                 events.getNumber(),
@@ -131,8 +129,7 @@ public class CalendarController {
                                                   @PathVariable("eventId") UUID eventId,
                                                   @RequestHeader("X-User-Id") String userId) {
         UUID ownerId = UUID.fromString(userId);
-        Event event = eventService.findOwnedEventOrThrow(calendarId, eventId, ownerId);
-        return ResponseEntity.ok(CalendarMapper.toEventResponse(event));
+        return ResponseEntity.ok(eventService.getEvent(calendarId, eventId, ownerId));
     }
 
     @PostMapping("/{id}/events")
@@ -140,8 +137,7 @@ public class CalendarController {
                                                   @RequestHeader("X-User-Id") String userId,
                                                   @Valid @RequestBody CreateEventRequest body) {
         UUID ownerId = UUID.fromString(userId);
-        Event event = eventService.addEvent(id, ownerId, body);
-        return ResponseEntity.status(HttpStatus.CREATED).body(CalendarMapper.toEventResponse(event));
+        return ResponseEntity.status(HttpStatus.CREATED).body(eventService.addEvent(id, ownerId, body));
     }
 
     @PatchMapping("/{calendarId}/events/{eventId}")
@@ -150,8 +146,7 @@ public class CalendarController {
                                                      @RequestHeader("X-User-Id") String userId,
                                                      @Valid @RequestBody UpdateEventRequest body) {
         UUID ownerId = UUID.fromString(userId);
-        Event event = eventService.updateEvent(calendarId, eventId, ownerId, body);
-        return ResponseEntity.ok(CalendarMapper.toEventResponse(event));
+        return ResponseEntity.ok(eventService.updateEvent(calendarId, eventId, ownerId, body));
     }
 
     @DeleteMapping("/{calendarId}/events/{eventId}")

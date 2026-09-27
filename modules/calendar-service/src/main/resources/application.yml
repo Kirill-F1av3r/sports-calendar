@@ -7,6 +7,7 @@ spring:
     username: ${CALENDAR_DB_USERNAME:postgres}
     password: ${CALENDAR_DB_PASSWORD:1234}
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: ${CALENDAR_JPA_DDL_AUTO:validate}
     show-sql: ${CALENDAR_JPA_SHOW_SQL:false}

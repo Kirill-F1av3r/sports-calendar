@@ -1,6 +1,8 @@
 package com.flaver.calendarservice.service;
 
+import com.flaver.calendarservice.dto.CalendarMapper;
 import com.flaver.calendarservice.dto.CreateEventRequest;
+import com.flaver.calendarservice.dto.EventResponse;
 import com.flaver.calendarservice.dto.UpdateEventRequest;
 import com.flaver.calendarservice.entity.Event;
 import com.flaver.calendarservice.exception.NotFoundException;
@@ -45,16 +47,16 @@ public class EventService {
     private final SortParser sortParser;
 
     @Transactional(readOnly = true)
-    public Page<Event> findEvents(UUID calendarId,
-                                  UUID ownerId,
-                                  LocalDate from,
-                                  LocalDate to,
-                                  String competitionLevel,
-                                  String priority,
-                                  String search,
-                                  Integer page,
-                                  Integer size,
-                                  String sort) {
+    public Page<EventResponse> findEvents(UUID calendarId,
+                                          UUID ownerId,
+                                          LocalDate from,
+                                          LocalDate to,
+                                          String competitionLevel,
+                                          String priority,
+                                          String search,
+                                          Integer page,
+                                          Integer size,
+                                          String sort) {
         calendarService.findOwnedOrThrow(calendarId, ownerId);
         Pageable pageable = PageRequest.of(
                 normalizePage(page),
@@ -71,11 +73,15 @@ public class EventService {
                         search
                 ),
                 pageable
-        );
+        ).map(CalendarMapper::toEventResponse);
     }
 
     @Transactional(readOnly = true)
-    public Event findOwnedEventOrThrow(UUID calendarId, UUID eventId, UUID ownerId) {
+    public EventResponse getEvent(UUID calendarId, UUID eventId, UUID ownerId) {
+        return CalendarMapper.toEventResponse(findOwnedEventOrThrow(calendarId, eventId, ownerId));
+    }
+
+    private Event findOwnedEventOrThrow(UUID calendarId, UUID eventId, UUID ownerId) {
         calendarService.findOwnedOrThrow(calendarId, ownerId);
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new NotFoundException("Event not found"));
@@ -86,7 +92,7 @@ public class EventService {
     }
 
     @Transactional
-    public Event addEvent(UUID calendarId, UUID ownerId, CreateEventRequest request) {
+    public EventResponse addEvent(UUID calendarId, UUID ownerId, CreateEventRequest request) {
         calendarService.findOwnedOrThrow(calendarId, ownerId);
 
         var endDate = request.endDate() != null ? request.endDate() : request.startDate();
@@ -104,7 +110,7 @@ public class EventService {
         event.setExternalUrl(trimToNull(request.externalUrl()));
         event.setDisciplines(normalizeDisciplines(request.disciplines()));
         event.setPriority(EventEnumParser.parsePriorityOrDefault(request.priority()));
-        return eventRepository.save(event);
+        return CalendarMapper.toEventResponse(eventRepository.save(event));
     }
 
     @Transactional
@@ -118,7 +124,7 @@ public class EventService {
     }
 
     @Transactional
-    public Event updateEvent(UUID calendarId, UUID eventId, UUID ownerId, UpdateEventRequest request) {
+    public EventResponse updateEvent(UUID calendarId, UUID eventId, UUID ownerId, UpdateEventRequest request) {
         Event event = findOwnedEventOrThrow(calendarId, eventId, ownerId);
 
         if (request.title() != null) {
@@ -156,12 +162,17 @@ public class EventService {
             event.setPriority(EventEnumParser.parsePriorityOrDefault(request.priority()));
         }
 
-        return eventRepository.save(event);
+        return CalendarMapper.toEventResponse(eventRepository.save(event));
     }
 
     @Transactional
     public void deleteEvent(UUID calendarId, UUID eventId, UUID ownerId) {
-        Event event = findOwnedEventOrThrow(calendarId, eventId, ownerId);
+        calendarService.findOwnedOrThrow(calendarId, ownerId);
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new NotFoundException("Event not found"));
+        if (!event.getCalendarId().equals(calendarId)) {
+            throw new NotFoundException("Event not found");
+        }
         eventRepository.delete(event);
     }
 

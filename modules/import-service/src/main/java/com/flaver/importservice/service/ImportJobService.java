@@ -80,12 +80,14 @@ public class ImportJobService {
                         saved.getSourceContentType()
                 ));
 
-        return ImportMapper.toJobResponse(saved);
+        return ImportMapper.toJobResponse(saved, 0, 0);
     }
 
     @Transactional(readOnly = true)
     public ImportJobResponse getJob(UUID userId, UUID jobId) {
-        return ImportMapper.toJobResponse(findOwned(jobId, userId));
+        return importJobRepository.findSummaryByIdAndUserId(jobId, userId)
+                .map(ImportMapper::toJobResponse)
+                .orElseThrow(() -> new IllegalArgumentException("import job not found"));
     }
 
     @Transactional(readOnly = true)
@@ -136,9 +138,8 @@ public class ImportJobService {
             throw new IllegalArgumentException("import job is not ready");
         }
 
-        List<ImportDraftEvent> validEvents = draftEventRepository.findByJobIdOrderByCreatedAtAsc(jobId).stream()
-                .filter(ImportDraftEvent::isValid)
-                .toList();
+        List<ImportDraftEvent> validEvents =
+                draftEventRepository.findByJobIdAndValidTrueOrderByCreatedAtAsc(jobId);
         if (validEvents.isEmpty()) {
             throw new IllegalArgumentException("there are no valid events to apply");
         }

@@ -10,6 +10,7 @@ import com.flaver.importservice.entity.ImportJob;
 import com.flaver.importservice.entity.ImportJobStatus;
 import com.flaver.importservice.repository.ImportDraftEventRepository;
 import com.flaver.importservice.repository.ImportJobRepository;
+import com.flaver.importservice.repository.ImportJobSummary;
 import com.flaver.importservice.storage.ObjectStorage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -97,6 +99,25 @@ class ImportJobLifecycleTest {
     }
 
     @Test
+    void readsJobSummaryWithoutLoadingDraftEntities() {
+        UUID jobId = UUID.randomUUID();
+        ImportJobSummary summary = mock(ImportJobSummary.class);
+        when(summary.getJobId()).thenReturn(jobId);
+        when(summary.getCalendarId()).thenReturn(calendarId);
+        when(summary.getFileName()).thenReturn("events.csv");
+        when(summary.getStatus()).thenReturn(ImportJobStatus.READY);
+        when(summary.getTotalEvents()).thenReturn(3L);
+        when(summary.getValidEvents()).thenReturn(2L);
+        when(jobRepository.findSummaryByIdAndUserId(jobId, userId)).thenReturn(Optional.of(summary));
+
+        var response = service.getJob(userId, jobId);
+
+        assertThat(response.totalEvents()).isEqualTo(3);
+        assertThat(response.validEvents()).isEqualTo(2);
+        assertThat(response.invalidEvents()).isEqualTo(1);
+    }
+
+    @Test
     void completesJobNormalizingDraftFieldsAndCanFailIt() {
         ImportJob job = job(ImportJobStatus.PROCESSING);
         when(jobRepository.findById(job.getId())).thenReturn(Optional.of(job));
@@ -132,7 +153,7 @@ class ImportJobLifecycleTest {
         ImportDraftEvent invalid = new ImportDraftEvent();
         invalid.setValid(false);
         when(jobRepository.findByIdAndUserId(job.getId(), userId)).thenReturn(Optional.of(job));
-        when(eventRepository.findByJobIdOrderByCreatedAtAsc(job.getId())).thenReturn(List.of(valid, invalid));
+        when(eventRepository.findByJobIdAndValidTrueOrderByCreatedAtAsc(job.getId())).thenReturn(List.of(valid));
         when(calendarClient.createEvents(org.mockito.ArgumentMatchers.eq(calendarId), org.mockito.ArgumentMatchers.eq(userId),
                 any(BatchCreateEventsRequest.class))).thenReturn(1);
 

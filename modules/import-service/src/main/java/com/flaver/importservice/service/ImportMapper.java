@@ -5,14 +5,13 @@ import com.flaver.importservice.dto.DraftEventResponse;
 import com.flaver.importservice.dto.ImportJobResponse;
 import com.flaver.importservice.entity.ImportDraftEvent;
 import com.flaver.importservice.entity.ImportJob;
+import com.flaver.importservice.repository.ImportJobSummary;
 
 public final class ImportMapper {
     private ImportMapper() {
     }
 
-    public static ImportJobResponse toJobResponse(ImportJob job) {
-        int total = job.getDraftEvents().size();
-        int valid = (int) job.getDraftEvents().stream().filter(ImportDraftEvent::isValid).count();
+    public static ImportJobResponse toJobResponse(ImportJob job, int total, int valid) {
         return new ImportJobResponse(
                 job.getId(),
                 job.getCalendarId(),
@@ -22,6 +21,21 @@ public final class ImportMapper {
                 valid,
                 total - valid,
                 job.getErrorMessage()
+        );
+    }
+
+    public static ImportJobResponse toJobResponse(ImportJobSummary summary) {
+        int total = Math.toIntExact(summary.getTotalEvents());
+        int valid = Math.toIntExact(summary.getValidEvents());
+        return new ImportJobResponse(
+                summary.getJobId(),
+                summary.getCalendarId(),
+                summary.getFileName(),
+                summary.getStatus().name(),
+                total,
+                valid,
+                total - valid,
+                summary.getErrorMessage()
         );
     }
 

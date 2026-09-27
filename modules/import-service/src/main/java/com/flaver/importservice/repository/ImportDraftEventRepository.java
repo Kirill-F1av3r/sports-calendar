@@ -10,5 +10,7 @@ import java.util.UUID;
 public interface ImportDraftEventRepository extends JpaRepository<ImportDraftEvent, UUID> {
     List<ImportDraftEvent> findByJobIdOrderByCreatedAtAsc(UUID jobId);
 
+    List<ImportDraftEvent> findByJobIdAndValidTrueOrderByCreatedAtAsc(UUID jobId);
+
     Optional<ImportDraftEvent> findByIdAndJobId(UUID id, UUID jobId);
 }

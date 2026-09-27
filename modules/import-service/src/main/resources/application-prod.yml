@@ -4,6 +4,7 @@ spring:
     username: ${IMPORT_DB_USERNAME}
     password: ${IMPORT_DB_PASSWORD}
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
     show-sql: false

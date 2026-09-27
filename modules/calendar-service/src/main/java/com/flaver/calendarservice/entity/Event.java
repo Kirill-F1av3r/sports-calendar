@@ -3,6 +3,7 @@ package com.flaver.calendarservice.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -39,7 +40,8 @@ public class Event {
     @Column(length = 500)
     private String externalUrl;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @BatchSize(size = 100)
     @CollectionTable(
             name = "event_disciplines",
             joinColumns = @JoinColumn(name = "event_id")
